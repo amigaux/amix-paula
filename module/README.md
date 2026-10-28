@@ -158,4 +158,15 @@ for programs. It needs a kernel of kabi minor 3.
 - **Bench (emulator first):** `port/test-tools/paulatest.c` on the module
   kernel, with `/dev/paula` made as `c 54 0`. It shows `/dev/audio` refused
   while `/dev/paula` is open, the tick rate (50.0 per second expected at
-  125 BPM, less the one-shot slowdown) and idle 0.
+  125 BPM, less the one-shot slowdown) and idle 1 or 2: the open's
+  self-test waits for a tick while the queue is empty (always 1), and the
+  program's setup before its first push can span one more. paulatest's
+  rate window also holds the wait for the first tick and its 50 ms drain
+  poll, up to about 2 % at 4 s; a drift measurement compares `played`
+  over a long window with the queue kept full.
+- **Emulation and `/dev/audio`:** the stock `audioinit()` waits at `spl7`,
+  with no timeout, for each channel's hand-fed word interrupt. Amiberry with
+  `sound_output=none` emulates no Paula interrupts, so the first `/dev/audio`
+  open of a boot freezes the box there (network, clock and keyboard stop).
+  Bench rows that open `/dev/audio` need `sound_output=interrupts` or
+  better. This is independent of `/dev/paula`.
