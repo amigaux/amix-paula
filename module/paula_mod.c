@@ -89,9 +89,12 @@ struct cred *crp;
 {
 	int e, i, chan;
 
+	/*
+	 * No test of timer B's START: neither kernel line uses timer B, and
+	 * Kickstart's timer.device leaves it running (continuous, latch
+	 * 0xffff), so START is set at every first open.  paulaopen stops it.
+	 */
 	if (busy || audio_nopen)
-		return EBUSY;
-	if (ACIAA->crb & CRB_START)	/* timer B runs for someone else */
 		return EBUSY;
 	if ((e = intr_attach(2, paula_int2, (char *)0, "paula")) != 0)
 		return e;

@@ -81,9 +81,12 @@ timer, so the module never writes it outside the restart.
 
 ## Open, close and the module entries
 
-- **open**: refused (`EBUSY`) while `/dev/paula` or `/dev/audio` is open, or
-  while timer B runs for someone else. The handler is attached before the
-  timer starts. The open then waits, in one-tick sleeps of at most 25 ticks,
+- **open**: refused (`EBUSY`) while `/dev/paula` or `/dev/audio` is open.
+  A running timer B is not a refusal: Kickstart's timer.device (3.0 to
+  3.2.x) starts CIA-A timer B continuous with latch `$FFFF` as its E-clock
+  counter, the kernel never stops it, so it runs at every first open; the
+  open stops and reprograms it, as the static form does. The handler is
+  attached before the timer starts. The open then waits, in one-tick sleeps of at most 25 ticks,
   for the first tick to arrive (the self-test of C3-6 §1.3). With no tick it
   undoes everything and returns `EIO`.
 - **close**: as the static form (channels off, area and queue freed), then
