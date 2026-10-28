@@ -33,6 +33,12 @@
  * audio_nopen, which paulaopen() checks.  Both globals live in the patched
  * audio.c (it is linked first).
  *
+ * Two forms, one source.  Built plainly, this is the static driver that
+ * relink-040-paula.sh links into a 68040/68060 kernel.  With -DPAULA_MODULE
+ * (module/paula_mod.c includes this file) it is a loadable module for the
+ * Amix module system: aciaaintr is left out, and timer B runs one-shot,
+ * restarted by the module's level-2 handler (module/README.md says why).
+ *
  * Original code for this port; no Commodore source.
  */
 #include "sys/types.h"
@@ -51,15 +57,21 @@
 extern int paula_busy;		/* patched audio.c */
 extern int audio_nopen;		/* patched audio.c */
 extern unsigned int displaytype;
+#ifndef PAULA_MODULE
 extern void kbintr();
 extern void parintr();
 extern int clock_int();
 extern void addupc_clk();
+#endif
 
 #define CHIPGUARD	16	/* zero bytes before the sample area: PAULA_NULLOFF */
 #define SCANLINES	5	/* ProTracker's DMA wait, ~320 us */
 #define CRB_START	0x01
+#ifndef PAULA_MODULE
 #define CRB_LOAD	0x10	/* continuous mode, E clock (RUNMODE, INMODE 0) */
+#else
+#define CRB_LOAD	0x18	/* one-shot (RUNMODE 1), E clock: module/paula_mod.c */
+#endif
 
 static struct paula_tick *ring;
 static volatile int head, tail;	/* ring[tail..head-1] are queued */
@@ -68,6 +80,9 @@ static unsigned long area;
 static unsigned long played, idle;
 static int busy;
 static int active;		/* timer B interrupts on */
+#ifdef PAULA_MODULE
+static unsigned short tb_latch;	/* the period the next one-shot restart loads */
+#endif
 
 /* per channel: where the sample pointer and length are, to keep the pair
    inside the area whichever is written first */
@@ -93,6 +108,13 @@ int bpm;
 {
 	unsigned short n = tempo_latch(bpm);
 
+#ifdef PAULA_MODULE
+	/* one-shot: a write to tbhi would restart a running timer; the
+	   level-2 handler loads tb_latch when it restarts it */
+	tb_latch = n;
+	if (active)
+		return;
+#endif
 	/* the latch; a running continuous timer reloads it at its next underflow */
 	ACIAA->tblo = n & 0xff;
 	ACIAA->tbhi = n >> 8;
@@ -223,6 +245,7 @@ paula_tick()
  * on timer A, in that order) and timer B for /dev/paula.  Reading icr
  * clears every pending bit, so there is one reader.
  */
+#ifndef PAULA_MODULE
 void
 aciaaintr(frame)
 pcb_t *frame;
@@ -238,6 +261,7 @@ pcb_t *frame;
 	if (icr & ICR_TB)
 		paula_tick();
 }
+#endif /* PAULA_MODULE */
 
 static void
 free_area()

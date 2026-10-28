@@ -1,0 +1,10 @@
+# The .moddata keys of the paula module (amix-dlm C3-1 section 3, C3-6), one
+# key=value string per line as the section carries them.  kabi, cc and cpu
+# come from the ABI kit of the line (68030 on k30, 68040 on k46);
+# module/Makefile turns this file into the kit's Master.  The major is
+# proposed (module/README.md): the registry gives 53 to kinfo.
+name=paula
+class=demand
+majors=c:54
+unload=allowed
+desc=Paula audio channels /dev/paula
