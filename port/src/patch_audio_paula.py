@@ -14,7 +14,15 @@ globals to audio.c, which is linked before paula.o:
 
 The count goes up where audioopen() puts a client on the driver's client
 list and down where audioclose() takes it off.  Both run in process context
-on a uniprocessor kernel, so a plain int is enough.
+on a uniprocessor kernel, so a plain int is enough -- as long as neither
+open sleeps between its test of the other's flag and the setting of its
+own.  audioopen() allocates its client with kmem_alloc(KM_SLEEP) after the
+first test, and a /dev/paula open can take the channels while it sleeps.
+So audioopen() tests paula_busy again once it holds splaudio, after the
+allocation and before audioinit() or the client list is touched; if
+/dev/paula got in, it frees the client and fails with EBUSY.  From there
+to audio_nopen++ nothing sleeps.  (paulaopen() keeps its own half: it
+tests audio_nopen and sets paula_busy before anything that can sleep.)
 
 /dev/audio (c 46,0) is one STREAMS device, not a clone: every process that
 opens it shares one stream.  STREAMS calls audioopen() on every open() of
@@ -32,8 +40,9 @@ which must match exactly once; our lines go in after it:
 
   1. the declaration of the client list head      -> the two globals
   2. audioopen(): the refusal of a module open    -> the two EBUSY tests
-  3. audioopen(): the client joins the list       -> audio_nopen++
-  4. audioclose(): the client leaves the list     -> audio_nopen--
+  3. audioopen(): the allocation, then splaudio   -> paula_busy tested again
+  4. audioopen(): the client joins the list       -> audio_nopen++
+  5. audioclose(): the client leaves the list     -> audio_nopen--
 """
 import hashlib
 import sys
@@ -50,6 +59,14 @@ PLACES = [
       "\treturn EBUSY;",
       "    if (q->q_ptr != NULL)\t/* the one stream is someone's already */",
       "\treturn EBUSY;"]),
+    ("audioopen: the allocation, then splaudio", 4,
+     "ee9b544876c2d66c5e13efa563cd58b49be448f402de0aba20f428875cf37411",
+     ["    if (paula_busy)\t/* /dev/paula got in while kmem_alloc slept */",
+      "    {",
+      "\tsplx(s);",
+      "\tkmem_free(acl, sizeof(*acl));",
+      "\treturn EBUSY;",
+      "    }"]),
     ("audioopen: client joins the list", 1,
      "6d4aa0e4693fbd2dc350b1a03f9053e937b5b6a6acf6ca2637af6d769cd3d446",
      ["    audio_nopen++;"]),

@@ -55,7 +55,7 @@ What the two steps do:
   `AMIX_ROOT` with two additions: `/dev/audio` and `/dev/paula` exclude each
   other, and `/dev/audio` refuses a second opener of its single stream.
   Commodore's source is copied and patched at build time; none of its text is
-  in this repository. `src/patch_audio_paula.py` finds the four places it
+  in this repository. `src/patch_audio_paula.py` finds the five places it
   changes by fingerprint (line count and SHA-256), and stops if any of them
   does not match exactly once.
 - **`relink-040-paula.sh`** compiles `src/paula.c` and links it in. It replaces

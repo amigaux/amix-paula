@@ -31,7 +31,9 @@
  * /dev/audio and /dev/paula exclude each other: patch_audio_paula.py makes
  * audioopen() refuse while paula_busy is set and counts its own clients in
  * audio_nopen, which paulaopen() checks.  Both globals live in the patched
- * audio.c (it is linked first).
+ * audio.c (it is linked first).  Each open tests the other's flag and sets
+ * its own with no sleep between: paulaopen() claims before it allocates,
+ * and audioopen() tests paula_busy again after its allocation.
  *
  * Two forms, one source.  Built plainly, this is the static driver that
  * relink-040-paula.sh links into a 68040/68060 kernel.  With -DPAULA_MODULE
@@ -296,11 +298,16 @@ struct cred *crp;
 
 	if (busy || audio_nopen)
 		return EBUSY;
-	ring = (struct paula_tick *)kmem_alloc(sizeof (struct paula_tick) * PAULA_RING, 0);
-	if (!ring)
-		return ENOMEM;
+	/* claimed before kmem_alloc can sleep: an open of /dev/audio or
+	 * /dev/paula in that sleep finds the channels taken */
 	busy = 1;
 	paula_busy = 1;
+	ring = (struct paula_tick *)kmem_alloc(sizeof (struct paula_tick) * PAULA_RING, 0);
+	if (!ring) {
+		busy = 0;
+		paula_busy = 0;
+		return ENOMEM;
+	}
 	head = tail = 0;
 	played = idle = 0;
 	chip = 0;
