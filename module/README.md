@@ -119,9 +119,9 @@ Paula the same way). The source is the same as well. What differs:
 
 The kernel cut rebuilds the stock audio driver with
 `port/src/patch_audio_paula.py`, which defines `paula_busy` and
-`audio_nopen`, and with `port/src/patch_audio_safeclose.py`. Both are
-applied by fingerprint to a build-time copy of the stock `audio.c`, in either
-order.
+`audio_nopen`, with `port/src/patch_audio_safeclose.py`, and with
+`port/src/patch_audio_initwait.py`. All three are applied by fingerprint to a
+build-time copy of the stock `audio.c`, in any order.
 
 Neither open sleeps between testing the other's flag and setting its own
 (C3-2 §3): `paulaopen()` sets `paula_busy` before its `kmem_alloc`, and the
@@ -134,9 +134,17 @@ then reads the freed client (`acl->repeat`, `acl->q`) and the channel can stay
 claimed. With the patch, the close stops each channel the client holds, at
 `splaudio`, before freeing it.
 
+The bounded init wait fixes another. On the first open of a boot,
+`audioinit()` hand-feeds a word to each channel and busy-waits at `splaudio`,
+with no limit, for the channel's interrupt request; a Paula that never raises
+it (amiberry `sound_output=none`, or a sick chip) stops the box there. With
+the patch each channel gets 32 scan lines (about 2 ms, counted on the beam
+counter; no CIA timer is touched), and on a timeout the open frees its client
+and fails with `EIO`. The next open tries again.
+
 On k46, `relink-040-audio-paula.sh` does the build as it does for the static
 path; `AUDIO_SRC` points it at a copy already patched with
-`patch_audio_safeclose.py`.
+`patch_audio_safeclose.py` and `patch_audio_initwait.py`.
 
 ## Packages
 
@@ -164,9 +172,11 @@ for programs. It needs a kernel of kabi minor 3.
   rate window also holds the wait for the first tick and its 50 ms drain
   poll, up to about 2 % at 4 s; a drift measurement compares `played`
   over a long window with the queue kept full.
-- **Emulation and `/dev/audio`:** the stock `audioinit()` waits at `spl7`,
+- **Emulation and `/dev/audio`:** the stock `audioinit()` waits at `splaudio`,
   with no timeout, for each channel's hand-fed word interrupt. Amiberry with
-  `sound_output=none` emulates no Paula interrupts, so the first `/dev/audio`
-  open of a boot freezes the box there (network, clock and keyboard stop).
-  Bench rows that open `/dev/audio` need `sound_output=interrupts` or
-  better. This is independent of `/dev/paula`.
+  `sound_output=none` emulates no Paula interrupts, so on a kernel without
+  `patch_audio_initwait.py` the first `/dev/audio` open of a boot freezes the
+  box there (network, clock and keyboard stop). With it, that open fails with
+  `EIO` after about 2 ms and the box carries on. Bench rows that play through
+  `/dev/audio` need `sound_output=interrupts` or better. This is independent
+  of `/dev/paula`.
