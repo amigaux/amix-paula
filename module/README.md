@@ -96,7 +96,7 @@ timer, so the module never writes it outside the restart.
 
 The module allocates the tick queue (24 832 bytes, `kmem_alloc`) at open and
 the sample area (chip, up to 1.5 MB, `AllocMem`) at `PAULA_SETUP`. The image
-is 2 804 bytes.
+is 2 820 bytes.
 
 ## k30 and k46
 
@@ -119,6 +119,11 @@ The kernel cut rebuilds the stock audio driver with
 `audio_nopen`, and with `port/src/patch_audio_safeclose.py`. Both are
 applied by fingerprint to a build-time copy of the stock `audio.c`, in either
 order.
+
+Neither open sleeps between testing the other's flag and setting its own
+(C3-2 §3): `paulaopen()` sets `paula_busy` before its `kmem_alloc`, and the
+patched `audioopen()` tests `paula_busy` again at `splaudio` after its own
+allocation, before `audioinit()` or the client list is touched.
 
 The safe close fixes a stock hazard. `audioclose()` frees the client but
 leaves it in `audio_channel[].client`. After a mid-stream kill, `audiointr()`
