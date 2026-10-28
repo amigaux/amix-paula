@@ -342,6 +342,16 @@ int *rvp;
 		chip = (char *)AllocMem(size + CHIPGUARD, MEMF_CHIP | MEMF_CLEAR);
 		if (!chip)
 			return ENOMEM;
+		/* AllocMem leaves chip memory as it was, MEMF_CLEAR or not (it
+		   clears only what it takes from kmem); the guard is the silent
+		   word.  Longwords: chip memory comes in 32-byte clicks */
+		{
+			register long *p = (long *)chip;
+			register long n = (size + CHIPGUARD + 3) / 4;
+
+			while (n-- > 0)
+				*p++ = 0;
+		}
 		area = size;
 		return 0;
 
