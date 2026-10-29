@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-10-29 — module/Makefile finds the kit in amix's kernel/dlm by default (af4d1e4)
+
+`DLM ?= ../amix/kernel/dlm` (was ../amix-dlm); module/README points at github.com/amigaux/amix. Objects byte-identical:
+k30 147844b4, k46 d2c7d8f4.
+
 ## 2026-10-28 — dlm-module: opt-in patcher port/src/patch_audio_initwait.py bounds the stock audioinit() busy-wait (32 scan lines per channel on VHPOSR, about 2 ms; no CIA timer touched); on timeout /dev/audio's open frees its client and fails EIO, and the next open retries. Applies in any order with the other two patchers; k46 audio_040.o 2be2b185 (safeclose, initwait, paula), TOTAL complaints 0, scan060 clean; module images unchanged (62fdcab)
 
 ## 2026-10-28 — module/README: the module form's paulatest shows idle 1–2 (the open's self-test counts one idle tick); /dev/audio under amiberry needs sound_output=interrupts, because with "none" the stock audioinit() spins at spl7 and the box freezes. No code change; images unchanged (a84400b)
