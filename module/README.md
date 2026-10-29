@@ -1,8 +1,9 @@
 # /dev/paula as a loadable module
 
 The same driver as the static relink path (`port/src/paula.c`), built as a
-loadable kernel module for the Amix module system (amix-dlm: the ABI kit,
-contracts C3-1, C3-2 and C3-6). One module per kernel line: `k30` (68030)
+loadable kernel module for the Amix module system (the ABI kit in
+[amix](https://github.com/amigaux/amix) under `kernel/dlm`, contracts C3-1,
+C3-2 and C3-6). One module per kernel line: `k30` (68030)
 and `k46` (68040/68060). The static path (`install.sh`, `port/relink-040-*.sh`)
 is unchanged and still builds the same `paula_040.o` from the same file.
 
@@ -19,14 +20,15 @@ is unchanged and still builds the same `paula_040.o` from the same file.
 ## Building
 
 You need the pinned gcc-cross-amix (`m68k-cbm-sysv4-*`) on `PATH`, `python3`,
-and amix-dlm's built kits (`make kit` there).
+and the built kits of an amix checkout (`make kit` in its `kernel/dlm`).
 
 ```sh
 make -C module            # both lines: build/k30/mod.d/paula, build/k46/mod.d/paula
 make -C module k46        # one line
 ```
 
-`DLM` names the amix-dlm checkout (default `../amix-dlm`); `KIT_k30` and
+`DLM` names the kit's directory, `kernel/dlm` of the amix checkout
+(default `../amix/kernel/dlm`, amix cloned beside this repo); `KIT_k30` and
 `KIT_k46` name kits directly. The build compiles from a staging directory
 (`build/<line>/stage`) holding `paula.c`, `paula.h` and the kit's Amiga
 `memory.h`, as the static relink pass does, so `#include "memory.h"` cannot
@@ -60,7 +62,7 @@ that also serves timer B. A module may not; it attaches with
 `aciaaintr` has read CIA-A's ICR, which clears every pending bit, timer B's
 included. The stock handler ignores that bit, and neither kernel line uses
 CIA-A timer B (read from the stock `acia.c` and `cl.c`, the port's `src/`,
-amix-dlm's core).
+the module core in amix's `kernel/dlm`).
 
 So the module runs timer B one-shot. An underflow stops the timer and clears
 CRB's START bit. `paula_int2` restarts the timer from the latch first, then

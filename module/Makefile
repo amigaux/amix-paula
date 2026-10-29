@@ -1,5 +1,6 @@
 # module/Makefile -- /dev/paula as a loadable module, one per kernel line, built
-# with amix-dlm's ABI kit (the kit's docs/guide.md; contract C3-6).  GNU make.
+# with the amix module kit (kernel/dlm; its docs/guide.md, contract C3-6).
+# GNU make.
 #
 #   make -C module            both lines: build/k30/mod.d/paula and
 #                             build/k46/mod.d/paula, each checked by the kit's
@@ -7,8 +8,10 @@
 #   make -C module k46        one line (or k30)
 #   make -C module clean
 #
-# DLM is the amix-dlm checkout whose kits are built (`make kit` there gives
-# build/kit/k30 and build/kit/k46); KIT_k30 / KIT_k46 name a kit directly.
+# DLM is kernel/dlm of an amix checkout (github.com/amigaux/amix) whose kits
+# are built (`make kit` there gives build/kit/k30 and build/kit/k46); the
+# default is ../amix/kernel/dlm beside this repo.  KIT_k30 / KIT_k46 name a
+# kit directly.
 # The pinned cross tools (m68k-cbm-sysv4-*, gcc-cross-amix) and python3 must
 # be on PATH.  The source is port/src/paula.c, the static driver's own file,
 # included by module/paula_mod.c with PAULA_MODULE defined.  Like the static
@@ -18,7 +21,7 @@
 # kit gives each line its own.  The cdevsw major is the one in keys.
 
 TOP := $(abspath $(dir $(lastword $(MAKEFILE_LIST)))..)
-DLM ?= $(abspath $(TOP)/../amix-dlm)
+DLM ?= $(abspath $(TOP)/../amix/kernel/dlm)
 LINES = k30 k46
 kit = $(or $(KIT_$(1)),$(DLM)/build/kit/$(1))
 
