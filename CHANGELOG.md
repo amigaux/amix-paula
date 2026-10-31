@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-10-31 â .gitignore lists only build/ (f142a90)
+
+Local tool-file ignores moved to the clone's .git/info/exclude. Module images unchanged: k30 147844b4, k46 d2c7d8f4.
+
 ## 2026-10-29 — module/Makefile finds the kit in amix's kernel/dlm by default (af4d1e4)
 
 `DLM ?= ../amix/kernel/dlm` (was ../amix-dlm); module/README points at github.com/amigaux/amix. Objects byte-identical:
