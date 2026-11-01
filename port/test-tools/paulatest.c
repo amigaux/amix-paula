@@ -10,12 +10,15 @@
  *   paulatest -d [s]     drift: the queue kept full for s seconds (30),
  *                        ticks played against the clock
  *   paulatest -i         what the driver reports (PAULA_INFO)
+ *   paulatest -s [s]     stress: s seconds (10) of silent ticks of 24
+ *                        DMA off/on pairs at 255 BPM; the box must stay
+ *                        responsive and the rate hold (about 102 a second)
  *
  * Expected: about 50 ticks a second at 125 BPM (CIA-A timer B), "idle"
  * small (the queue is kept full), /dev/audio refused while open.
  * Built with the native cc on AMIX: cc -o paulatest paulatest.c
  *
- * Copyright (c) 2026 isoriano1968; -n, -d, -i (c) 2026 Jussi Alanärä.
+ * Copyright (c) 2026 isoriano1968; -n, -d, -i, -s (c) 2026 Jussi Alanärä.
  * MIT licence, see LICENSE.
  */
 #include <stdio.h>
@@ -202,6 +205,44 @@ int secs;
 	return 0;
 }
 
+/* -s: the worst tick for the DMA waits, at the fastest tempo */
+static int stress(secs)
+int secs;
+{
+	struct paula_tick t;
+	struct paula_status st;
+	long t0, t1;
+	unsigned long p0;
+	int i;
+
+	if (ioctl(fd, PAULA_SETUP, (char *)1024) < 0) {
+		perror("PAULA_SETUP");
+		return 1;
+	}
+	t.nops = 0;
+	op(&t, PO_TEMPO, 0, 255, 0L);
+	for (i = 0; i < 4; i++)
+		op(&t, PO_VOL, i, 0, 0L);
+	push(&t);
+	t.nops = 0;
+	for (i = 0; i < PAULA_MAXOPS / 2; i++) {
+		op(&t, PO_DMA, 0, 1 << (i & 3), 0L);
+		op(&t, PO_DMA, 0, PO_DMAON | 1 << (i & 3), 0L);
+	}
+	ioctl(fd, PAULA_STATUS, (char *)&st);
+	p0 = st.played;
+	t0 = now_ms();
+	do {
+		push(&t);
+		t1 = now_ms();
+	} while (t1 - t0 < secs * 1000L);
+	ioctl(fd, PAULA_STATUS, (char *)&st);
+	t1 = now_ms();
+	printf("stress: %lu ticks of 24 off/on pairs in %ld ms: %.1f per second at 255 BPM (expect about 102); idle %lu\n",
+	    st.played - p0, t1 - t0, (st.played - p0) * 1000.0 / (t1 - t0), st.idle);
+	return 0;
+}
+
 int main(argc, argv)
 int argc;
 char **argv;
@@ -229,8 +270,10 @@ char **argv;
 			return drift(argc > 2 ? atoi(argv[2]) : 30);
 		case 'i':
 			return info(&in) < 0;
+		case 's':
+			return stress(argc > 2 ? atoi(argv[2]) : 10);
 		}
-		fprintf(stderr, "usage: paulatest [-n | -d [seconds] | -i]\n");
+		fprintf(stderr, "usage: paulatest [-n | -d [seconds] | -i | -s [seconds]]\n");
 		return 2;
 	}
 	a = open("/dev/audio", O_WRONLY);

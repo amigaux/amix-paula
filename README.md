@@ -121,7 +121,9 @@ It also plays a scale: a square wave on channel 0 and a saw an octave lower on
 channel 1. `paulatest -n` checks the refusals (bounds, malformed ticks, a
 full queue) and `PAULA_WAIT`, `PAULA_RESET` and open/close/open;
 `paulatest -d [seconds]` keeps the queue full and compares the ticks played
-with the clock; `paulatest -i` prints `PAULA_INFO`.
+with the clock; `paulatest -i` prints `PAULA_INFO`; `paulatest -s
+[seconds]` plays silent ticks of 24 DMA off/on pairs at 255 BPM, the
+worst case for the waits.
 
 On the build host, `make -C tests` runs the host tests: the driver in both
 forms against a fake of Paula, CIA-A and the kernel, the `cdevsw` patcher
