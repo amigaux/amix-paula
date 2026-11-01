@@ -104,12 +104,17 @@ static int active;		/* timer B interrupts on */
 #ifdef PAULA_MODULE
 static unsigned short tb_latch;	/* the period the next one-shot restart loads */
 #endif
-static int clock_set;		/* 0 auto, 1 NTSC, 2 PAL (the module's parameter) */
+/* the module's parameters (module/paula_mod.c); the static form keeps these */
+static int clock_set;		/* clock: 0 auto, 1 NTSC, 2 PAL */
+static int nring = PAULA_RING;	/* ring: tick slots, one always empty */
+static unsigned long maxarea = PAULA_MAXAREA;	/* maxarea: SETUP's limit */
 static unsigned char led_was;	/* PRA_LED at open, put back at close */
 static int waiting;		/* a PAULA_WAIT sleeps on &waiting */
 static unsigned long clock_flags;	/* PI_* of the clock in use */
 
-#define QUEUED()	((head - tail + PAULA_RING) % PAULA_RING)
+/* the ring indices wrap by test, not %: nring is a variable */
+#define NEXT(i)		((i) + 1 == nring ? 0 : (i) + 1)
+#define QUEUED()	(head >= tail ? head - tail : head - tail + nring)
 
 /* the queue moved or was dropped: a PAULA_WAIT looks again */
 static void
@@ -338,7 +343,7 @@ paula_tick()
 	}
 	for (i = 0; i < nheld; i++)
 		put_op(&t->op[held[i]]);
-	tail = (tail + 1) % PAULA_RING;
+	tail = NEXT(tail);
 	played++;
 	wake_waiters();
 }
@@ -430,7 +435,7 @@ paula_start()
 	/* KM_NOSLEEP: an open fails with ENOMEM rather than wait, perhaps
 	   for good, when the kernel map is short (amix kernel/dlm C3-6 v9:
 	   the memory rule holds in every entry point a user's call runs) */
-	ring = (struct paula_tick *)kmem_alloc(sizeof (struct paula_tick) * PAULA_RING, KM_NOSLEEP);
+	ring = (struct paula_tick *)kmem_alloc(sizeof (struct paula_tick) * nring, KM_NOSLEEP);
 	if (!ring)
 		return ENOMEM;
 	head = tail = 0;
@@ -479,7 +484,7 @@ struct cred *crp;
 {
 	stop_all();
 	free_area();
-	kmem_free((caddr_t)ring, sizeof (struct paula_tick) * PAULA_RING);
+	kmem_free((caddr_t)ring, sizeof (struct paula_tick) * nring);
 	ring = 0;
 	paula_release();
 	return 0;
@@ -501,7 +506,7 @@ unsigned long size;
 {
 	int s;
 
-	if (size > PAULA_MAXAREA)
+	if (size > maxarea)
 		return EINVAL;
 	/* nothing may still play from the old area */
 	s = spl4();
@@ -603,7 +608,7 @@ int *rvp;
 		return e;
 
 	case PAULA_PUSH:
-		next = (head + 1) % PAULA_RING;
+		next = NEXT(head);
 		if (next == tail || inio)
 			return EAGAIN;
 		inio = 1;
@@ -631,9 +636,9 @@ int *rvp;
 		in.flags = clock_flags;
 		in.clock = clock_flags & PI_NTSC ? CLOCK_NTSC : CLOCK_PAL;
 		in.eclock = in.clock / 5;
-		in.queue = PAULA_RING - 1;
+		in.queue = nring - 1;
 		in.maxops = PAULA_MAXOPS;
-		in.maxarea = PAULA_MAXAREA;
+		in.maxarea = maxarea;
 		if (copyout((caddr_t)&in, (caddr_t)arg, sizeof in))
 			return EFAULT;
 		return 0;

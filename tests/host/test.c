@@ -521,6 +521,51 @@ t_wait(void)
 	CHECK(drv_close() == 0);
 }
 
+/* the module's parameters */
+static void
+t_params(void)
+{
+	struct paula_info *in = (struct paula_info *)(user + 12288);
+	struct paula_tick *t;
+	int i, e = 0;
+
+	if (!drv_module())
+		return;
+	start("params");
+	CHECK(drv_load("clock=1 maxarea=8192 ring=8") == 0);
+	CHECK(drv_open() == 0);
+	CHECK(latch() == 14318);			/* NTSC on a PAL id */
+	CHECK(drv_ioctl(PAULA_INFO, (long)in) == 0);
+	CHECK(in->flags == (PI_SET | PI_NTSC));
+	CHECK(in->queue == 7 && in->maxarea == 8192);
+	CHECK(drv_ioctl(PAULA_SETUP, 8193L) == EINVAL);
+	CHECK(drv_ioctl(PAULA_SETUP, 8192L) == 0);
+	t = utick();
+	for (i = 0; i < 7; i++)
+		e |= drv_ioctl(PAULA_PUSH, (long)t);
+	CHECK(e == 0);
+	CHECK(drv_ioctl(PAULA_PUSH, (long)t) == EAGAIN);
+	for (i = 0; i < 20; i++) {		/* round the ring a few times */
+		drv_timer();
+		e |= drv_ioctl(PAULA_PUSH, (long)t);
+	}
+	CHECK(e == 0 && queued() == 7);
+	CHECK(drv_close() == 0);
+	CHECK(fake_kmem_live == 0);
+	/* clamped, unknown and malformed values */
+	CHECK(drv_load("clockx=1 ring=999 maxarea=12ab clock=2") == 0);
+	CHECK(drv_open() == 0);
+	CHECK(drv_ioctl(PAULA_INFO, (long)in) == 0);
+	CHECK(in->flags == PI_SET && in->queue == PAULA_RING - 1);
+	CHECK(in->maxarea == PAULA_MAXAREA);
+	CHECK(drv_close() == 0);
+	CHECK(drv_load((char *)0) == 0);		/* the defaults */
+	CHECK(drv_open() == 0);
+	CHECK(drv_ioctl(PAULA_INFO, (long)in) == 0);
+	CHECK(in->flags == 0 && in->queue == PAULA_RING - 1);
+	CHECK(drv_close() == 0);
+}
+
 /* idle counts underruns only: not the self-test's tick, not the ticks
    before the first push */
 static void
@@ -610,6 +655,7 @@ main(void)
 	t_no_area();
 	t_led();
 	t_wait();
+	t_params();
 	t_idle();
 	t_queue_full();
 	t_chip_clear();

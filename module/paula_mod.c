@@ -134,12 +134,49 @@ struct cred *crp;
 	return 0;
 }
 
-/*ARGSUSED*/
+/*
+ * The value of name in the parameter string ("name=value ...", decimal),
+ * or def when it is absent or not a number; clamped to lo..hi.
+ */
+static long
+param(params, name, def, lo, hi)
+char *params, *name;
+long def, lo, hi;
+{
+	char *p = params, *n;
+	long v;
+
+	while (p && *p) {
+		while (*p == ' ')
+			p++;
+		for (n = name; *n && *p == *n; n++, p++)
+			;
+		if (!*n && *p == '=' && p[1] >= '0' && p[1] <= '9') {
+			for (v = 0, p++; *p >= '0' && *p <= '9'; p++)
+				v = v * 10 + (*p - '0');
+			if (*p == ' ' || !*p)
+				return v < lo ? lo : v > hi ? hi : v;
+		}
+		while (*p && *p != ' ')
+			p++;
+	}
+	return def;
+}
+
+/*
+ * The parameters (keys: their defaults and limits): clock (0 auto, 1 NTSC,
+ * 2 PAL; pick_clock in paula.c), maxarea (SETUP's limit in bytes) and
+ * ring (tick slots; PAULA_PUSH queues one fewer).  Nothing else until the
+ * first open.
+ */
 static int
 paula_load(params)
 char *params;
 {
-	return 0;		/* nothing until the first open */
+	clock_set = (int)param(params, "clock", 0L, 0L, 2L);
+	maxarea = (unsigned long)param(params, "maxarea", PAULA_MAXAREA, 4096L, PAULA_MAXAREA);
+	nring = (int)param(params, "ring", (long)PAULA_RING, 4L, (long)PAULA_RING);
+	return 0;
 }
 
 /* not while open (the core holds the module); also after a failed load */
