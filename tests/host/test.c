@@ -204,6 +204,33 @@ t_tick_order(void)
 	CHECK(drv_close() == 0);
 }
 
+/* idle counts underruns only: not the self-test's tick, not the ticks
+   before the first push */
+static void
+t_idle(void)
+{
+	struct paula_tick *t;
+	struct paula_status *st = (struct paula_status *)(user + 12288);
+
+	start("idle");
+	CHECK(drv_open() == 0);
+	drv_timer();
+	drv_timer();
+	CHECK(drv_ioctl(PAULA_STATUS, (long)st) == 0);
+	CHECK(st->idle == 0 && st->played == 0);
+	t = utick();
+	CHECK(drv_ioctl(PAULA_PUSH, (long)t) == 0);
+	drv_timer();			/* plays it */
+	drv_timer();			/* an underrun */
+	CHECK(drv_ioctl(PAULA_STATUS, (long)st) == 0);
+	CHECK(st->played == 1 && st->idle == 1);
+	CHECK(drv_ioctl(PAULA_RESET, 0L) == 0);
+	drv_timer();
+	CHECK(drv_ioctl(PAULA_STATUS, (long)st) == 0);
+	CHECK(st->idle == 1);
+	CHECK(drv_close() == 0);
+}
+
 static void
 t_queue_full(void)
 {
@@ -257,6 +284,7 @@ main(void)
 	t_selftest_race();
 	t_selftest_noint();
 	t_tick_order();
+	t_idle();
 	t_queue_full();
 	t_chip_clear();
 	fprintf(stdout, "%s: %d checks, %d failed\n",

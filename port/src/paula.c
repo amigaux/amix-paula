@@ -81,6 +81,7 @@ static char *chip;		/* CHIPGUARD + area bytes of chip RAM */
 static unsigned long area;
 static unsigned long played, idle;
 static unsigned long ticks;	/* timer B ticks taken while active */
+static int fed;			/* pushed to since the queue was last dropped */
 static int busy;
 static int active;		/* timer B interrupts on */
 #ifdef PAULA_MODULE
@@ -193,7 +194,8 @@ paula_tick()
 		return;
 	ticks++;
 	if (tail == head) {
-		idle++;
+		if (fed)	/* an underrun, not the wait for the first push */
+			idle++;
 		return;
 	}
 	t = &ring[tail];
@@ -287,6 +289,7 @@ stop_all()
 	active = 0;
 	channels_off();
 	tail = head;
+	fed = 0;
 	splx(s);
 }
 
@@ -323,6 +326,7 @@ paula_start()
 		return ENOMEM;
 	head = tail = 0;
 	played = idle = ticks = 0;
+	fed = 0;
 	chip = 0;
 	area = 0;
 
@@ -392,6 +396,7 @@ int *rvp;
 		s = spl4();
 		channels_off();
 		tail = head;
+		fed = 0;
 		splx(s);
 		free_area();
 		if (size == 0)
@@ -441,6 +446,7 @@ int *rvp;
 		    (caddr_t)t->op, t->nops * sizeof (struct paula_op)))
 			return EFAULT;
 		head = next;		/* the tick may take it from here on */
+		fed = 1;
 		return 0;
 
 	case PAULA_STATUS:
@@ -457,6 +463,7 @@ int *rvp;
 	case PAULA_RESET:
 		s = spl4();
 		tail = head;
+		fed = 0;
 		channels_off();
 		splx(s);
 		return 0;

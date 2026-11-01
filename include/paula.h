@@ -53,7 +53,10 @@ struct paula_load {
 
 struct paula_status {
 	unsigned long	played;		/* ticks applied */
-	unsigned long	idle;		/* timer ticks that found the queue empty */
+	unsigned long	idle;		/* timer ticks that found the queue empty
+					   after a push: underruns (the wait for
+					   the first push after open, SETUP or
+					   RESET is not counted) */
 	unsigned long	queued;		/* ticks waiting */
 	unsigned long	area;		/* sample area bytes */
 };
