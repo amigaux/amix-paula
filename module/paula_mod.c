@@ -46,6 +46,7 @@ extern void wakeup();
 extern int printf();
 
 static int attached;		/* paula_int2 is on the level-2 chain */
+static int selftest_chan;	/* the self-test's wait channel */
 
 /*
  * On the level-2 chain: one call per level-2 interrupt, whatever raised it.
@@ -66,13 +67,6 @@ char *arg;
 }
 
 static void
-paula_wake(chan)
-caddr_t chan;
-{
-	wakeup(chan);
-}
-
-static void
 paula_detach()
 {
 	if (attached) {
@@ -87,7 +81,7 @@ dev_t *dp;
 int oflag, otyp;
 struct cred *crp;
 {
-	int e, i, chan;
+	int e, i, s;
 
 	/*
 	 * No test of timer B's START: neither kernel line uses timer B, and
@@ -103,12 +97,19 @@ struct cred *crp;
 		paula_detach();
 		return e;
 	}
-	/* the self-test: the first underflow (20 ms at 125 BPM) reaches us */
-	for (i = 0; i < SELFTEST_TICKS && played + idle == 0; i++) {
-		timeout(paula_wake, (caddr_t)&chan, 1);
-		sleep((caddr_t)&chan, PZERO);
+	/*
+	 * The self-test: the first underflow (20 ms at 125 BPM) reaches us.
+	 * One-tick rounds at spl4, so the clock cannot run the timeout
+	 * between timeout() and sleep() and lose the wakeup; sleep() lets
+	 * the level fall while it waits.  At most SELFTEST_TICKS rounds.
+	 */
+	s = spl4();
+	for (i = 0; i < SELFTEST_TICKS && ticks == 0; i++) {
+		timeout(wakeup, (caddr_t)&selftest_chan, 1);
+		sleep((caddr_t)&selftest_chan, PZERO);
 	}
-	if (played + idle == 0) {
+	splx(s);
+	if (ticks == 0) {
 		paulaclose(*dp, oflag, otyp, crp);
 		paula_detach();
 		printf("paula: no timer B interrupt on the level-2 chain\n");

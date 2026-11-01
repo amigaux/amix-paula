@@ -80,6 +80,7 @@ static volatile int head, tail;	/* ring[tail..head-1] are queued */
 static char *chip;		/* CHIPGUARD + area bytes of chip RAM */
 static unsigned long area;
 static unsigned long played, idle;
+static unsigned long ticks;	/* timer B ticks taken while active */
 static int busy;
 static int active;		/* timer B interrupts on */
 #ifdef PAULA_MODULE
@@ -190,6 +191,7 @@ paula_tick()
 
 	if (!active)
 		return;
+	ticks++;
 	if (tail == head) {
 		idle++;
 		return;
@@ -309,7 +311,7 @@ struct cred *crp;
 		return ENOMEM;
 	}
 	head = tail = 0;
-	played = idle = 0;
+	played = idle = ticks = 0;
 	chip = 0;
 	area = 0;
 
