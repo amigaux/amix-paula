@@ -204,6 +204,84 @@ t_tick_order(void)
 	CHECK(drv_close() == 0);
 }
 
+/* 24 off/on pairs in one tick: two waits at most, not 48 */
+static void
+t_dma_bound(void)
+{
+	struct paula_tick *t;
+	long t0, lines;
+	int i;
+
+	start("dma_bound");
+	CHECK(drv_open() == 0);
+	CHECK(setup(1024) == 0);
+	t = utick();
+	for (i = 0; i < PAULA_MAXOPS / 2; i++) {
+		op(t, PO_DMA, 0, 1 << (i & 3), 0);
+		op(t, PO_DMA, 0, 0x8000 | 1 << (i & 3), 0);
+	}
+	CHECK(drv_ioctl(PAULA_PUSH, (long)t) == 0);
+	t0 = fake_now;
+	drv_timer();
+	lines = (fake_now - t0) / UNITS_PER_LINE;
+	CHECK(lines <= 2 * 5 + 10);	/* two waits and the ops themselves */
+	fprintf(stdout, "  dma_bound: %ld lines for 24 off/on pairs\n", lines);
+	CHECK(drv_close() == 0);
+}
+
+/* one PO_DMA per channel, each with its own loop part: one DMA on for
+   all four, every loop pointer written after it has been latched */
+static void
+t_per_channel(void)
+{
+	struct paula_tick *t;
+	int c, i, nset = 0, nloop = 0, late = 1;
+	long toff = -1, ton = -1;
+
+	start("per_channel");
+	CHECK(drv_open() == 0);
+	CHECK(setup(1024) == 0);
+	t = utick();
+	for (c = 0; c < 4; c++) {
+		op(t, PO_DMA, c, 1 << c, 0);
+		op(t, PO_LEN, c, 16, 0);
+		op(t, PO_LC, c, 0, 0);
+		op(t, PO_PER, c, 300 + c, 0);
+		op(t, PO_VOL, c, 40, 0);
+		op(t, PO_DMA, c, 0x8000 | 1 << c, 0);
+		op(t, PO_LC, c, 0, 32);
+		op(t, PO_LEN, c, 8, 0);
+	}
+	CHECK(drv_ioctl(PAULA_PUSH, (long)t) == 0);
+	fake_nev = 0;
+	drv_timer();
+	hw_step();
+	for (i = 0; i < fake_nev; i++) {
+		struct ev *e = &fake_ev[i];
+
+		if (e->kind == EV_DMACON && !(e->v & 0x8000))
+			toff = e->t;
+		if (e->kind == EV_DMACON && (e->v & 0x8000)) {
+			nset++;
+			ton = e->t;
+			CHECK(e->v == 0x800f);
+		}
+		if (e->kind == EV_LC && e->v == 16 + 32) {
+			nloop++;
+			if (ton < 0 || e->t - ton <= 4 * UNITS_PER_LINE)
+				late = 0;
+		}
+	}
+	CHECK(nset == 1);
+	CHECK(ton - toff > 4 * UNITS_PER_LINE);
+	CHECK(nloop == 4 && late);
+	for (c = 0; c < 4; c++) {
+		CHECK(fake_amiga.audio[c].size == 8);
+		CHECK(fake_amiga.audio[c].period == 300 + c);
+	}
+	CHECK(drv_close() == 0);
+}
+
 /* idle counts underruns only: not the self-test's tick, not the ticks
    before the first push */
 static void
@@ -284,6 +362,8 @@ main(void)
 	t_selftest_race();
 	t_selftest_noint();
 	t_tick_order();
+	t_dma_bound();
+	t_per_channel();
 	t_idle();
 	t_queue_full();
 	t_chip_clear();

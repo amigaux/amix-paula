@@ -19,8 +19,10 @@
  * switched off, registers set, a wait of a few scanlines so Paula notices,
  * DMA on, a few scanlines more so Paula has latched pointer and length,
  * then the loop pointer and length for the next cycle.  The waits poll the
- * beam counter (VHPOSR), as players do; they cost under 1 ms of IPL 2 per
- * tick, and IPL 5 (serial) still preempts them.
+ * beam counter (VHPOSR), as players do.  There are at most two per tick
+ * whatever the tick holds (paula_tick says how), so at most 2 * SCANLINES
+ * lines, about 0.64 ms, of IPL 2 per tick; IPL 5 (serial) still preempts
+ * them.
  *
  * Concurrency: the queue is a single-producer ring -- PAULA_PUSH (process
  * context) writes ring[head] then advances head; the tick (IPL 2) reads
@@ -182,13 +184,41 @@ channels_off()
 	}
 }
 
-/* one queued tick, from the level-2 interrupt */
+/* sample pointer or length of the op's channel */
+static void
+put_op(o)
+struct paula_op *o;
+{
+	int c = o->ch & 3;
+
+	if (o->op == PO_LC)
+		ch_off[c] = o->off;
+	else
+		ch_len[c] = o->val;
+	put_sample(c);
+}
+
+/*
+ * One queued tick, from the level-2 interrupt.
+ *
+ * The ops are applied in order, except that DMA on is collected: the
+ * channels a tick switches on go on together after its last op, and a
+ * pointer or length written to such a channel after its PO_DMA on is held
+ * until then (it is the loop part, for the next cycle).  So a tick waits
+ * twice at most, however many PO_DMA it holds: SCANLINES before DMA on
+ * when one of those channels was switched off in this tick (Paula must
+ * see it off), and SCANLINES after (Paula must have latched pointer and
+ * length before the loop part is written).  A ProTracker tick -- off,
+ * registers, on, loop part -- is played as before; one PO_DMA per channel
+ * costs no more than one for all four.
+ */
 static void
 paula_tick()
 {
 	struct paula_tick *t;
 	struct paula_op *o;
-	int i, n, c, cleared = 0;
+	int i, n, c, bits, off = 0, on = 0, nheld = 0;
+	unsigned char held[PAULA_MAXOPS];	/* ops waiting for DMA on */
 
 	if (!active)
 		return;
@@ -204,12 +234,11 @@ paula_tick()
 		c = o->ch & 3;
 		switch (o->op) {
 		case PO_LC:
-			ch_off[c] = o->off;
-			put_sample(c);
-			break;
 		case PO_LEN:
-			ch_len[c] = o->val;
-			put_sample(c);
+			if (on & (1 << c))
+				held[nheld++] = i;
+			else
+				put_op(o);
 			break;
 		case PO_PER:
 			AMIGA->audio[c].period = o->val < 113 ? 113 : o->val;
@@ -218,17 +247,13 @@ paula_tick()
 			AMIGA->audio[c].loud = o->val > 64 ? 64 : o->val;
 			break;
 		case PO_DMA:
-			if (o->val & 0x8000) {
-				if (cleared)	/* let Paula see the channel off */
-					wait_lines(SCANLINES);
-				AMIGA->dmacon = DMASET | (o->val & 0xf);
-				/* the loop pointer and length that follow are for
-				   the next cycle: Paula must have latched these */
-				wait_lines(SCANLINES);
-				cleared = 0;
-			} else {
-				AMIGA->dmacon = DMACLR | (o->val & 0xf);
-				cleared = 1;
+			bits = o->val & 0xf;
+			if (o->val & 0x8000)
+				on |= bits;
+			else {
+				AMIGA->dmacon = DMACLR | bits;
+				off |= bits;
+				on &= ~bits;
 			}
 			break;
 		case PO_LED:
@@ -242,6 +267,16 @@ paula_tick()
 			break;
 		}
 	}
+	if (on) {
+		if (off & on)		/* let Paula see the channel off */
+			wait_lines(SCANLINES);
+		AMIGA->dmacon = DMASET | on;
+		/* the loop pointer and length that follow are for the next
+		   cycle: Paula must have latched these */
+		wait_lines(SCANLINES);
+	}
+	for (i = 0; i < nheld; i++)
+		put_op(&t->op[held[i]]);
 	tail = (tail + 1) % PAULA_RING;
 	played++;
 }
