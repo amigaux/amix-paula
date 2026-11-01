@@ -37,23 +37,38 @@ make -C module k46        # one line
 dropped by `-traditional`, with the kit's objdump) and that the two copies
 of `paula.h` are the same bytes.
 
-## What the module needs from the kernel (not in DDI v1.2)
+## What the module needs from the kernel (DDI minor 3)
 
-Today's kits (kabi 1.2) refuse the module. `modfix` names five symbols:
+A kabi 1.2 kit refuses the module; `modfix` names five symbols, which DDI
+minor 3 adds (the kits of 1.3 and 1.4 build it, tagged `k30.1.3` and
+`k46.1.3`):
 
 | Name | Kind | Provider | Why |
 |---|---|---|---|
 | `AllocMem`, `FreeMem` | func | stock (`amiga/console/memory.c`) | the sample area must be chip RAM; no DDI call gives chip memory (`dma_alloc` never does, C4-5 §5.4) |
-| `displaytype` | data, read-only | stock (`amiga/driver/cl.c`) | `PAL` (`sys/param.h`): the E clock behind the tempo, 709 379 or 715 909 Hz |
+| `displaytype` | data, read-only | stock (`amiga/driver/cl.c`) | the kernel's count of 50 or 60 Hz video fields, reported in `PAULA_INFO` beside the chip id that picks the clock (`pick_clock()` in `paula.c`) |
 | `paula_busy` | data, written by this module only | the audio driver patched by `port/src/patch_audio_paula.py` | `/dev/audio` refuses its open while it is set |
 | `audio_nopen` | data, read-only | the same | `/dev/paula` refuses its open while `/dev/audio` has a client |
 
 And the major: **c 54**, paula's in the registry and free in the stock
 tables; the static form registers the same major (53 is `kinfo`'s).
 
-With those five names as kabi minor 3 and `c 54 paula` in the registry,
+With those five names in kabi minor 3 and `c 54 paula` in the registry,
 both lines pass `modfix` and `modcheck.py` (k46 with the 68060 scan and the
 page-geometry check).
+
+## Parameters
+
+`keys` declares three; `param paula.<name>=<value>` in
+`/etc/conf/modreg.local.d/paula` sets one, read at load. Out-of-range
+values are clamped.
+
+| Name | Default | Range | |
+|---|---|---|---|
+| `clock` | 0 | 0–2 | 0: PAL or NTSC from the Agnus/Alice id; 1: NTSC; 2: PAL. For a machine whose crystal is not the chip's |
+| `maxarea` | 1572864 | 4096–1572864 | the largest sample area `PAULA_SETUP` takes, in bytes |
+| `ring` | 64 | 4–64 | tick slots, 388 bytes each; `PAULA_PUSH` queues one fewer |
+
 
 ## The timer: one-shot, restarted from the level-2 chain
 
@@ -85,24 +100,30 @@ timer, so the module never writes it outside the restart.
 ## Open, close and the module entries
 
 - **open**: refused (`EBUSY`) while `/dev/paula` or `/dev/audio` is open.
-  A running timer B is not a refusal: Kickstart's timer.device (3.0 to
-  3.2.x) starts CIA-A timer B continuous with latch `$FFFF` as its E-clock
-  counter, the kernel never stops it, so it runs at every first open; the
-  open stops and reprograms it, as the static form does. The handler is
-  attached before the timer starts. The open then waits, in one-tick sleeps of at most 25 ticks,
-  for the first tick to arrive (the self-test of C3-6 §1.3). With no tick it
-  undoes everything and returns `EIO`.
-- **close**: as the static form (channels off, area and queue freed), then
-  the handler detached.
-- **`_load`**: nothing; the module is `demand` class and loads at the first
-  open of `/dev/paula`.
+  The channels are claimed first, with no sleep between the test and the
+  claim, so of two racing opens one gets `EBUSY`. A running timer B is not
+  a refusal: Kickstart's timer.device (3.0 to 3.2.x) starts CIA-A timer B
+  continuous with latch `$FFFF` as its E-clock counter, the kernel never
+  stops it, so it runs at every first open; the open stops and reprograms
+  it, as the static form does. The handler is attached before the timer
+  starts. The open then waits for the first tick (the self-test of C3-6
+  §1.3): at most 25 rounds of a one-tick `timeout` and `sleep`, at `spl4`
+  so the clock cannot run the timeout before the sleep and lose the
+  wakeup. With no tick it undoes everything and returns `EIO`. The tick
+  ring comes from `kmem_alloc` with `KM_NOSLEEP` (C3-6 v9); when the kernel
+  map is short the open fails with `ENOMEM`.
+- **close**: as the static form (channels off, the "LED" filter bit as the
+  open found it, area and queue freed), then the handler detached.
+- **`_load`**: reads the parameters, nothing else; the module is `demand`
+  class and loads at the first open of `/dev/paula`.
 - **`_unload`**: `unload=allowed`. The core never calls it while the device is
   open. It detaches the handler if it is still attached.
-- **`_halt`**: if the device is open, timer B off and audio DMA off. No sleep.
+- **`_halt`**: if the device is open, timer B off, audio DMA off, the four
+  volumes 0 and the "LED" filter bit put back. No sleep.
 
-The module allocates the tick queue (24 832 bytes, `kmem_alloc`) at open and
-the sample area (chip, up to 1.5 MB, `AllocMem`) at `PAULA_SETUP`. The image
-is 2 820 bytes.
+The module allocates the tick queue (24 832 bytes at `ring=64`,
+`kmem_alloc`) at open and the sample area (chip, up to `maxarea` bytes,
+`AllocMem`) at `PAULA_SETUP`. The image is 4 372 bytes.
 
 ## k30 and k46
 
@@ -159,7 +180,7 @@ One package per line, made by amix-packages (as monsw's):
 | pkginst | `paula30` | `paula46` |
 
 Each ships `/etc/conf/mod.d/paula`, `/etc/conf/modreg.d/paula` (the
-package's parameter defaults), `/dev/paula` as `c 54 0` mode 0660 owner
+package's parameter defaults; none beyond the module's own), `/dev/paula` as `c 54 0` mode 0660 owner
 `root` group `audio`, and `include/paula.h` for programs. It needs a
 kernel of kabi minor 3, and the `audio` group on the box: its members may
 play. The holder of `/dev/paula` owns up to `maxarea` bytes of chip RAM
@@ -167,17 +188,19 @@ and CIA-A timer B, so the node is not open to every user.
 
 ## Testing
 
-- **Host:** `make -C module` against the kits (above). The static path's own
+- **Host:** `make -C module` against the kits (above), and `make -C tests`
+  (the driver in both forms on a fake of the hardware and the kernel, the
+  `cdevsw` patcher, `install.sh`, the audio patchers). The static path's own
   checks: `install.sh` into a port checkout, then the two relink steps.
 - **Bench (emulator first):** `port/test-tools/paulatest.c` on the module
-  kernel, with `/dev/paula` made as `c 54 0`, mode 0660, group `audio`. It shows `/dev/audio` refused
-  while `/dev/paula` is open, the tick rate (50.0 per second expected at
-  125 BPM, less the one-shot slowdown) and idle 1 or 2: the open's
-  self-test waits for a tick while the queue is empty (always 1), and the
-  program's setup before its first push can span one more. paulatest's
-  rate window also holds the wait for the first tick and its 50 ms drain
-  poll, up to about 2 % at 4 s; a drift measurement compares `played`
-  over a long window with the queue kept full.
+  kernel, with `/dev/paula` made as `c 54 0`, mode 0660, group `audio`. It
+  shows `/dev/audio` refused while `/dev/paula` is open, the tick rate (50.0
+  per second expected at 125 BPM, less the one-shot slowdown) and idle 0:
+  idle counts underruns only, not the self-test's tick nor the ticks before
+  the first push (before 2026-11-01 it showed 1 or 2). paulatest's rate
+  window also holds the wait for the first tick and its 50 ms drain poll,
+  up to about 2 % at 4 s; `paulatest -d` compares `played` over 30 s with
+  the queue kept full, and `paulatest -n` checks the refusals.
 - **Emulation and `/dev/audio`:** the stock `audioinit()` waits at `splaudio`,
   with no timeout, for each channel's hand-fed word interrupt. Amiberry with
   `sound_output=none` emulates no Paula interrupts, so on a kernel without
