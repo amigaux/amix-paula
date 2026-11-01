@@ -46,9 +46,8 @@ Today's kits (kabi 1.2) refuse the module. `modfix` names five symbols:
 | `paula_busy` | data, written by this module only | the audio driver patched by `port/src/patch_audio_paula.py` | `/dev/audio` refuses its open while it is set |
 | `audio_nopen` | data, read-only | the same | `/dev/paula` refuses its open while `/dev/audio` has a client |
 
-And the major: the registry gives 53 (the static form's) to `kinfo`.
-`keys` proposes **c 54**, free in the stock tables and in the port's static
-kernels.
+And the major: **c 54**, paula's in the registry and free in the stock
+tables; the static form registers the same major (53 is `kinfo`'s).
 
 With those five names as kabi minor 3 and `c 54 paula` in the registry,
 both lines pass `modfix` and `modcheck.py` (k46 with the 68060 scan and the

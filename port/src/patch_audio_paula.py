@@ -3,7 +3,7 @@
 Applied to a build-time copy of the stock AMIX 2.1c audio driver
 (usr/sys/amiga/driver/audio.c).  Usage: patch_audio_paula.py audio.c
 
-/dev/paula (src/paula.c, major 53) takes Paula's four channels and drives
+/dev/paula (src/paula.c, major 54) takes Paula's four channels and drives
 their registers directly; /dev/audio feeds the same channels from its own
 buffers and interrupts.  They must never run at once.  This adds two
 globals to audio.c, which is linked before paula.o:

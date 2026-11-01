@@ -1,5 +1,5 @@
 #!/bin/sh
-# relink-040-paula.sh -- add /dev/paula (src/paula.c, major 53) to a 68040/68060
+# relink-040-paula.sh -- add /dev/paula (src/paula.c, major 54) to a 68040/68060
 # kernel whose audio driver defines paula_busy and audio_nopen
 # (relink-040-audio-paula.sh, src/patch_audio_paula.py).  /dev/paula gives one program
 # Paula's four channels register by register, replayed from CIA-A timer B;

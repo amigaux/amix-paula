@@ -8,6 +8,10 @@ Acceptance record for the native Paula driver (`src/paula.c`, `relink-040-paula.
 > audio driver with only the `/dev/paula` exclusion (`relink-040-audio-paula.sh`). That smaller
 > combination builds and links, but has not yet been run on hardware.
 
+> **Major (amix-paula, 2026-11-01).** This record's `/dev/paula c 53 0` is the major of that
+> day. The static form now registers major 54, the major of the module form and of the amix
+> module registry, where 53 is `kinfo`'s.
+
 ## Platform
 
 **HW.** Amiga 3000, Z3660 (68060 at 80 MHz), 128 MB, booted natively (pvmk `boot` native, not

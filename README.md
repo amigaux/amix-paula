@@ -47,7 +47,7 @@ is the kernel your chain has produced so far:
 
 ```sh
 sh relink-040-audio-paula.sh IN unix-aud      # stock audio driver + the /dev/paula exclusion
-sh relink-040-paula.sh unix-aud unix-paula    # /dev/paula itself (cdevsw[53])
+sh relink-040-paula.sh unix-aud unix-paula    # /dev/paula itself (cdevsw[54])
 ```
 
 What the two steps do:
@@ -60,7 +60,7 @@ What the two steps do:
   does not match exactly once.
 - **`relink-040-paula.sh`** compiles `src/paula.c` and links it in. It replaces
   the level-2 CIA-A handler with one that also serves timer B, and registers
-  the driver as character major 53.
+  the driver as character major 54, the major the module form takes.
   - `src/patch_paula_cdevsw.py` checks the `cdevsw` layout it expects and
     refuses to patch anything else.
   - Both steps check their input and output: symbols, unresolved references,
@@ -71,7 +71,7 @@ Then finish the kernel as usual: root/swap stamp, CACR, install in `/stand`.
 On the machine, once, as root:
 
 ```sh
-mknod /dev/paula c 53 0 && chmod 666 /dev/paula
+mknod /dev/paula c 54 0 && chmod 666 /dev/paula
 ```
 
 ## Testing

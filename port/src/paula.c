@@ -1,5 +1,5 @@
 /*
- * paula.c -- /dev/paula (major 53): Paula's four audio channels for one
+ * paula.c -- /dev/paula (major 54): Paula's four audio channels for one
  * program, replayed tick by tick from CIA-A timer B (AMIX 68040/68060 port,
  * 2026-10-27).  The interface is in paula.h.
  *

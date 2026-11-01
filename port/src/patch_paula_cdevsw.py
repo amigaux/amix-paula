@@ -1,29 +1,36 @@
 #!/usr/bin/env python3
-# patch_paula_cdevsw.py -- register /dev/paula (src/paula.c) as cdevsw[53]
+# patch_paula_cdevsw.py -- register /dev/paula (src/paula.c) as cdevsw[54]
 # after paula.o has been ld -r'd into the kernel (relink-040-paula.sh,
 # 2026-10-27).  Same relocation-retarget mechanism as patch_zz9000_cdevsw.py:
-# d_open, d_close and d_ioctl of slot 53 carry R_68K_32 relocations to
+# d_open, d_close and d_ioctl of slot 54 carry R_68K_32 relocations to
 # `nodev` in this kernel and are retargeted to paulaopen/paulaclose/
 # paulaioctl; d_read, d_write and d_mmap stay nodev.  Majors in use here:
 # 46 audio, 48/51 Ethernet (51 filled by the parinit hook), 49 zz9000,
-# 50 sad, 67 svga, 68 va2000.
+# 50 sad, 67 svga, 68 va2000.  54 is paula's in the amix module registry
+# (kernel/dlm abi/registry/majors), the major the module form takes too;
+# 53 there is kinfo's.
 #
-# The slot offset is DERIVED from the cdevsw symbol (cdevsw + 53*52) and
-# asserted against the value measured on the s3d3 kernel (cdevsw at .data
-# 0x9dd4), so a layout drift aborts instead of patching the wrong slot.
-# Idempotent; fails closed on any mismatch.
+# The slot is DERIVED from the kernel's own symbols: cdevsw (its offset and
+# size) and cdevcnt (its value in .data).  The entry size is the table's
+# size over its count and must be 52, the layout the field indices below
+# assume; slot 54 must be inside the table and unused (every relocation in
+# its row to nodev or nullflag), so a layout drift aborts instead of
+# patching the wrong slot.  Idempotent; fails closed on any mismatch.
+#
+# Copyright (c) 2026 isoriano1968; slot 54 and the derived slot (c) 2026
+# Jussi Alanärä.  MIT licence, see LICENSE.
 
 import struct, sys
 
 KERNEL = sys.argv[1]
 R_68K_32 = 1
-CDEVSW_MAJOR = 53
-EXPECT_SLOT_OFF = 0x9dd4 + 53 * 52
-ENTSIZE = 52                     # sizeof(struct cdevsw) on this kernel
+CDEVSW_MAJOR = 54
+ENTSIZE = 52                     # sizeof(struct cdevsw) the fields assume
 
 # (field index within the 52-byte entry, entry point): d_open, d_close, d_ioctl
 FIELDS = [(0, "paulaopen"), (1, "paulaclose"), (4, "paulaioctl")]
 EXPECT_CUR = "nodev"
+UNUSED = ("nodev", "nullflag")   # what an unused row's relocations name
 
 
 def u16(b, o): return struct.unpack(">H", b[o:o + 2])[0]
@@ -61,20 +68,41 @@ def main():
     def sym_value(name):
         return u32(b, so + sym_index(name) * se + 4)
 
+    def sym_size(name):
+        return u32(b, so + sym_index(name) * se + 8)
+
+    def sym_shndx(name):
+        return u16(b, so + sym_index(name) * se + 14)
+
+    data = byname[".data"]
+    if sh[sym_shndx("cdevsw")] is not data or sh[sym_shndx("cdevcnt")] is not data:
+        raise SystemExit("ABORT: cdevsw or cdevcnt is not in .data")
     cdevsw = sym_value("cdevsw")
-    slot_off = cdevsw + CDEVSW_MAJOR * ENTSIZE
-    if slot_off != EXPECT_SLOT_OFF:
-        raise SystemExit("ABORT: computed cdevsw[%d] offset 0x%x != expected 0x%x "
+    cdevcnt = u32(b, data["offset"] + sym_value("cdevcnt"))
+    size = sym_size("cdevsw")
+    if cdevcnt == 0 or size % cdevcnt or size // cdevcnt != ENTSIZE:
+        raise SystemExit("ABORT: cdevsw is %d bytes for cdevcnt %d, not %d-byte entries "
                           "-- cdevsw layout drifted, re-verify before patching"
-                          % (CDEVSW_MAJOR, slot_off, EXPECT_SLOT_OFF))
+                          % (size, cdevcnt, ENTSIZE))
+    if CDEVSW_MAJOR >= cdevcnt:
+        raise SystemExit("ABORT: cdevsw has %d entries, no slot %d" % (cdevcnt, CDEVSW_MAJOR))
+    slot_off = cdevsw + CDEVSW_MAJOR * ENTSIZE
 
     rela = byname[".rela.data"]
     ro, re_ = rela["offset"], rela["entsize"]; rn = rela["size"] // re_
     reloc_at = {}
+    row = {}
     for i in range(rn):
         o = ro + i * re_; roff = u32(b, o)
         if slot_off <= roff < slot_off + 4 * 6:
             reloc_at[roff] = o
+        if slot_off <= roff < slot_off + ENTSIZE:
+            row[roff] = symname(u32(b, o + 4) >> 8)
+    ours = {slot_off + idx * 4: name for idx, name in FIELDS}
+    for roff, name in sorted(row.items()):
+        if name not in UNUSED and ours.get(roff) != name:
+            raise SystemExit("ABORT: cdevsw[%d] is in use: +%d -> %s"
+                              % (CDEVSW_MAJOR, roff - slot_off, name))
 
     done = skip = 0
     for idx, name in FIELDS:

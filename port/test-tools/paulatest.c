@@ -4,7 +4,7 @@
  * driver's tick queue, and checks the tick rate and the exclusion with
  * /dev/audio.
  *
- *   paulatest            needs /dev/paula (mknod /dev/paula c 53 0)
+ *   paulatest            needs /dev/paula (mknod /dev/paula c 54 0)
  *
  * Expected: about 50 ticks a second at 125 BPM (CIA-A timer B), "idle"
  * small (the queue is kept full), /dev/audio refused while open.
