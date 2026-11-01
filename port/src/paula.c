@@ -356,7 +356,10 @@ paula_start()
 {
 	int s;
 
-	ring = (struct paula_tick *)kmem_alloc(sizeof (struct paula_tick) * PAULA_RING, 0);
+	/* KM_NOSLEEP: an open fails with ENOMEM rather than wait, perhaps
+	   for good, when the kernel map is short (amix kernel/dlm C3-6 v9:
+	   the memory rule holds in every entry point a user's call runs) */
+	ring = (struct paula_tick *)kmem_alloc(sizeof (struct paula_tick) * PAULA_RING, KM_NOSLEEP);
 	if (!ring)
 		return ENOMEM;
 	head = tail = 0;

@@ -107,6 +107,24 @@ t_exclusion(void)
 	CHECK(drv_close() == 0);
 }
 
+/* the ring: KM_NOSLEEP, and a clean ENOMEM */
+static void
+t_nosleep(void)
+{
+	start("nosleep");
+	CHECK(drv_open() == 0);
+	CHECK(fake_kmem_flag == 1);		/* KM_NOSLEEP */
+	CHECK(drv_close() == 0);
+	fake_kmem_fail = 1;
+	CHECK(drv_open() == ENOMEM);
+	CHECK(!drv_busy() && !paula_busy && !drv_active());
+	if (drv_module())
+		CHECK(fake_int2 == 0);
+	fake_kmem_fail = 0;
+	CHECK(drv_open() == 0);
+	CHECK(drv_close() == 0);
+}
+
 /* a second open while the first sleeps in intr_attach */
 static int second;
 
@@ -358,6 +376,7 @@ main(void)
 	}
 	t_open_close();
 	t_exclusion();
+	t_nosleep();
 	t_open_race();
 	t_selftest_race();
 	t_selftest_noint();
