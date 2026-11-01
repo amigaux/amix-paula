@@ -61,7 +61,7 @@ char *arg;
 	/* the next period first: the latch, then a forced load and start */
 	ACIAA->tblo = tb_latch & 0xff;
 	ACIAA->tbhi = tb_latch >> 8;
-	ACIAA->crb = CRB_START | CRB_LOAD;
+	ACIAA->crb = CRB_RUN;
 	paula_tick();
 	return 1;
 }
@@ -161,7 +161,7 @@ paula_halt()
 	ACIAA->icr = ICR_CLR | ICR_TB;
 	ACIAA->crb = 0;
 	active = 0;
-	AMIGA->dmacon = DMACLR | DMAAUD0 | DMAAUD1 | DMAAUD2 | DMAAUD3;
+	AMIGA->dmacon = DMACLR | DMA_AUDIO;
 }
 
 struct mod_drv_data paula_drvdata[] = {

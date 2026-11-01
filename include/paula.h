@@ -35,6 +35,7 @@
 #define PO_PER		3	/* val: period */
 #define PO_VOL		4	/* val: volume 0..64 */
 #define PO_DMA		5	/* val: DMACON bits 0..3, bit 15 set = on, clear = off */
+#define PO_DMAON	0x8000	/* PO_DMA val: bit 15, switch the channels on */
 #define PO_LED		6	/* val: 1 = "LED" low-pass filter on */
 #define PO_TEMPO	7	/* val: BPM 32..255 (timer B rate from the next tick) */
 

@@ -74,11 +74,20 @@ extern void addupc_clk();
 #define CLOCK_NTSC	3579545L
 #define VPOSR_NTSC	0x1000	/* Agnus/Alice id bit 4: an NTSC part */
 #define SCANLINES	5	/* ProTracker's DMA wait, ~320 us */
+#define PERIOD_MIN	113	/* ProTracker's highest note, B-3 */
+#define VOLUME_MAX	64
+#define DMA_AUDIO	(DMAAUD0 | DMAAUD1 | DMAAUD2 | DMAAUD3)	/* DMACON bits 0-3 */
+#define AIE_AUDIO	(AIEAUD0 | AIEAUD1 | AIEAUD2 | AIEAUD3)
+#define PRA_LED		0x02	/* CIA-A PRA bit 1, /LED: low = power LED
+				   bright and the audio low-pass filter in */
+/* CIA control register B: timer B counts the E clock (INMODE 0) */
 #define CRB_START	0x01
+#define CRB_RUNMODE	0x08	/* one-shot: an underflow stops the timer */
+#define CRB_LOAD	0x10	/* force load: the latch into the counter */
 #ifndef PAULA_MODULE
-#define CRB_LOAD	0x10	/* continuous mode, E clock (RUNMODE, INMODE 0) */
+#define CRB_RUN		(CRB_START | CRB_LOAD)			/* continuous */
 #else
-#define CRB_LOAD	0x18	/* one-shot (RUNMODE 1), E clock: module/paula_mod.c */
+#define CRB_RUN		(CRB_START | CRB_RUNMODE | CRB_LOAD)	/* module/paula_mod.c */
 #endif
 
 static struct paula_tick *ring;
@@ -212,7 +221,7 @@ channels_off()
 {
 	int c;
 
-	AMIGA->dmacon = DMACLR | DMAAUD0 | DMAAUD1 | DMAAUD2 | DMAAUD3;
+	AMIGA->dmacon = DMACLR | DMA_AUDIO;
 	for (c = 0; c < 4; c++) {
 		AMIGA->audio[c].loud = 0;
 		ch_off[c] = PAULA_NULLOFF;
@@ -277,14 +286,14 @@ paula_tick()
 				put_op(o);
 			break;
 		case PO_PER:
-			AMIGA->audio[c].period = o->val < 113 ? 113 : o->val;
+			AMIGA->audio[c].period = o->val < PERIOD_MIN ? PERIOD_MIN : o->val;
 			break;
 		case PO_VOL:
-			AMIGA->audio[c].loud = o->val > 64 ? 64 : o->val;
+			AMIGA->audio[c].loud = o->val > VOLUME_MAX ? VOLUME_MAX : o->val;
 			break;
 		case PO_DMA:
-			bits = o->val & 0xf;
-			if (o->val & 0x8000)
+			bits = o->val & DMA_AUDIO;
+			if (o->val & PO_DMAON)
 				on |= bits;
 			else {
 				AMIGA->dmacon = DMACLR | bits;
@@ -294,9 +303,9 @@ paula_tick()
 			break;
 		case PO_LED:
 			if (o->val)
-				ACIAA->pra &= ~2;	/* power LED on: filter in */
+				ACIAA->pra &= ~PRA_LED;	/* power LED on: filter in */
 			else
-				ACIAA->pra |= 2;
+				ACIAA->pra |= PRA_LED;
 			break;
 		case PO_TEMPO:
 			set_tempo((int)o->val);
@@ -407,15 +416,15 @@ paula_start()
 
 	s = spl4();
 	/* the channels are ours: no audio interrupts (Paula loops by itself) */
-	AMIGA->intena = AINTCLR | AIEAUD0 | AIEAUD1 | AIEAUD2 | AIEAUD3;
-	AMIGA->intreq = AINTCLR | AIEAUD0 | AIEAUD1 | AIEAUD2 | AIEAUD3;
+	AMIGA->intena = AINTCLR | AIE_AUDIO;
+	AMIGA->intreq = AINTCLR | AIE_AUDIO;
 	channels_off();
 	/* timer B: 125 BPM until told otherwise, continuous, interrupting */
 	ACIAA->crb = 0;
 	set_tempo(125);
 	active = 1;
 	ACIAA->icr = ICR_SET | ICR_TB;
-	ACIAA->crb = CRB_START | CRB_LOAD;
+	ACIAA->crb = CRB_RUN;
 	splx(s);
 	return 0;
 }
