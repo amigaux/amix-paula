@@ -4,6 +4,8 @@
 #   make -C tests host       the driver on a fake of the hardware (host cc)
 #   make -C tests cdevsw     the static form's cdevsw patcher (cross as/ld)
 #   make -C tests install    install.sh
+#   make -C tests patchers   the audio.c patchers on the stock audio.c
+#                            (AUDIO_C, default ../amix-system's; else skipped)
 #
 # KERNEL=<a relocatable static k46 kernel> runs the cdevsw test on it too.
 #
@@ -11,7 +13,7 @@
 
 HERE := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
 
-all: host cdevsw install
+all: host cdevsw install patchers
 
 host:
 	$(MAKE) -C $(HERE)/host
@@ -22,4 +24,7 @@ cdevsw:
 install:
 	sh $(HERE)/install/test.sh
 
-.PHONY: all host cdevsw install
+patchers:
+	sh $(HERE)/patchers/test.sh
+
+.PHONY: all host cdevsw install patchers
