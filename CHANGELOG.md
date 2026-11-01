@@ -1,6 +1,16 @@
 # Changelog
 
-## 2026-10-31 â .gitignore lists only build/ (f142a90)
+## 2026-11-01 — the review fixes; module 1.1.0-1, interface version 2 (1375462..37dba85)
+
+The open's self-test can no longer hang, and the open claims the channels before attaching the interrupt (a racing
+open gets EBUSY); the tick ring is allocated KM_NOSLEEP. At most two DMA waits per tick (about 0.64 ms at IPL 2),
+however many DMA ops a tick holds. The static form registers major 54, like the module, with the cdevsw slot derived.
+PAL/NTSC comes from the Agnus/Alice id; new PAULA_INFO (version, clocks, limits) and PAULA_WAIT; PUSH refuses unknown
+ops, channels above 3 and odd offsets; close and halt restore the LED/filter bit. Module parameters clock, maxarea,
+ring. Node 0660 root:audio. LICENSE names both holders, and each file says whose code it is. Host tests under tests/.
+Images k30 46bc1eb0, k46 0f73f407.
+
+## 2026-10-31 — .gitignore lists only build/ (f142a90)
 
 Local tool-file ignores moved to the clone's .git/info/exclude. Module images unchanged: k30 147844b4, k46 d2c7d8f4.
 
