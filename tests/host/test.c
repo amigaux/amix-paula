@@ -107,6 +107,30 @@ t_exclusion(void)
 	CHECK(drv_close() == 0);
 }
 
+/* a second open while the first sleeps in intr_attach */
+static int second;
+
+static void
+open_second(void)
+{
+	second = drv_open();
+}
+
+static void
+t_open_race(void)
+{
+	if (!drv_module())
+		return;
+	start("open_race");
+	second = -1;
+	fake_on_attach = open_second;
+	CHECK(drv_open() == 0);
+	CHECK(second == EBUSY);
+	CHECK(drv_busy() && fake_int2 != 0);
+	CHECK(drv_close() == 0);
+	CHECK(fake_int2 == 0 && !paula_busy);
+}
+
 /* the clock runs a timeout made below spl4 before the sleep */
 static void
 t_selftest_race(void)
@@ -229,6 +253,7 @@ main(void)
 	}
 	t_open_close();
 	t_exclusion();
+	t_open_race();
 	t_selftest_race();
 	t_selftest_noint();
 	t_tick_order();

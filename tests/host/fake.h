@@ -33,6 +33,7 @@ extern int fake_hung;		/* a sleep that nothing would have ended */
 extern int fake_sleeps, fake_signal;
 extern int (*fake_int2)();	/* the attached level-2 handler */
 extern void (*fake_on_tick)();	/* one clock tick passes in a sleep */
+extern void (*fake_on_attach)();	/* intr_attach may sleep: another open runs */
 extern int fake_printfs;
 extern unsigned char *fake_chip_base;
 

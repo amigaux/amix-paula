@@ -86,15 +86,20 @@ struct cred *crp;
 	/*
 	 * No test of timer B's START: neither kernel line uses timer B, and
 	 * Kickstart's timer.device leaves it running (continuous, latch
-	 * 0xffff), so START is set at every first open.  paulaopen stops it.
+	 * 0xffff), so START is set at every first open.  paula_start stops it.
+	 * The claim comes first: a second opener gets EBUSY, not
+	 * intr_attach's EEXIST.
 	 */
-	if (busy || audio_nopen)
-		return EBUSY;
-	if ((e = intr_attach(2, paula_int2, (char *)0, "paula")) != 0)
+	if ((e = paula_claim()) != 0)
 		return e;
+	if ((e = intr_attach(2, paula_int2, (char *)0, "paula")) != 0) {
+		paula_release();
+		return e;
+	}
 	attached = 1;
-	if ((e = paulaopen(dp, oflag, otyp, crp)) != 0) {
+	if ((e = paula_start()) != 0) {
 		paula_detach();
+		paula_release();
 		return e;
 	}
 	/*

@@ -32,8 +32,8 @@
  * audioopen() refuse while paula_busy is set and counts its own clients in
  * audio_nopen, which paulaopen() checks.  Both globals live in the patched
  * audio.c (it is linked first).  Each open tests the other's flag and sets
- * its own with no sleep between: paulaopen() claims before it allocates,
- * and audioopen() tests paula_busy again after its allocation.
+ * its own with no sleep between: paula_claim() comes before anything that
+ * can sleep, and audioopen() tests paula_busy again after its allocation.
  *
  * Two forms, one source.  Built plainly, this is the static driver that
  * relink-040-paula.sh links into a 68040/68060 kernel.  With -DPAULA_MODULE
@@ -290,26 +290,37 @@ stop_all()
 	splx(s);
 }
 
-int
-paulaopen(dp, oflag, otyp, crp)
-dev_t *dp;
-int oflag, otyp;
-struct cred *crp;
+/*
+ * The channels: tested and claimed with no sleep between, so of two opens
+ * (of /dev/paula, or one of /dev/audio) one wins and the other gets EBUSY.
+ * Everything that can sleep comes after the claim.
+ */
+static int
+paula_claim()
+{
+	if (busy || audio_nopen)
+		return EBUSY;
+	busy = 1;
+	paula_busy = 1;
+	return 0;
+}
+
+static void
+paula_release()
+{
+	busy = 0;
+	paula_busy = 0;
+}
+
+/* the open's work once the channels are claimed */
+static int
+paula_start()
 {
 	int s;
 
-	if (busy || audio_nopen)
-		return EBUSY;
-	/* claimed before kmem_alloc can sleep: an open of /dev/audio or
-	 * /dev/paula in that sleep finds the channels taken */
-	busy = 1;
-	paula_busy = 1;
 	ring = (struct paula_tick *)kmem_alloc(sizeof (struct paula_tick) * PAULA_RING, 0);
-	if (!ring) {
-		busy = 0;
-		paula_busy = 0;
+	if (!ring)
 		return ENOMEM;
-	}
 	head = tail = 0;
 	played = idle = ticks = 0;
 	chip = 0;
@@ -331,6 +342,21 @@ struct cred *crp;
 }
 
 int
+paulaopen(dp, oflag, otyp, crp)
+dev_t *dp;
+int oflag, otyp;
+struct cred *crp;
+{
+	int e;
+
+	if ((e = paula_claim()) != 0)
+		return e;
+	if ((e = paula_start()) != 0)
+		paula_release();
+	return e;
+}
+
+int
 paulaclose(d, oflag, otyp, crp)
 dev_t d;
 int oflag, otyp;
@@ -340,8 +366,7 @@ struct cred *crp;
 	free_area();
 	kmem_free((caddr_t)ring, sizeof (struct paula_tick) * PAULA_RING);
 	ring = 0;
-	busy = 0;
-	paula_busy = 0;
+	paula_release();
 	return 0;
 }
 

@@ -34,6 +34,7 @@ int fake_chip_live, fake_chip_fail;
 int fake_race, fake_hung, fake_sleeps, fake_signal;
 int (*fake_int2)();
 void (*fake_on_tick)();
+void (*fake_on_attach)();
 int fake_printfs;
 unsigned char *fake_chip_base;
 static unsigned long chip_size;
@@ -63,6 +64,7 @@ fake_reset(void)
 	fake_kmem_fail = fake_chip_fail = 0;
 	fake_race = fake_hung = fake_sleeps = fake_signal = 0;
 	fake_on_tick = 0;
+	fake_on_attach = 0;
 	fake_printfs = 0;
 	ncallouts = 0;
 	woken = 0;
@@ -245,6 +247,12 @@ intr_attach(int level, int (*fn)(), char *arg, char *name)
 	if (fake_int2)
 		return EEXIST;
 	fake_int2 = fn;
+	if (fake_on_attach) {
+		void (*f)() = fake_on_attach;
+
+		fake_on_attach = 0;
+		f();
+	}
 	return 0;
 }
 
