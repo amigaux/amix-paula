@@ -372,18 +372,24 @@ int *rvp;
 		if (size == 0)
 			return 0;
 		size = (size + 1) & ~1L;
-		chip = (char *)AllocMem(size + CHIPGUARD, MEMF_CHIP | MEMF_CLEAR);
+		/* MEMF_CHIP only: AllocMem leaves chip memory as it was, with
+		   MEMF_CLEAR or without (it clears only what it takes from
+		   kmem) */
+		chip = (char *)AllocMem(size + CHIPGUARD, MEMF_CHIP);
 		if (!chip)
 			return ENOMEM;
-		/* AllocMem leaves chip memory as it was, MEMF_CLEAR or not (it
-		   clears only what it takes from kmem); the guard is the silent
-		   word.  Longwords: chip memory comes in 32-byte clicks */
+		/* so clear it: the guard is the silent word, and a channel
+		   pointed at a part not yet loaded plays silence.  32-bit
+		   words, then the last 16 bits when the even size leaves them;
+		   nothing past the request */
 		{
-			register long *p = (long *)chip;
-			register long n = (size + CHIPGUARD + 3) / 4;
+			register unsigned int *p = (unsigned int *)chip;
+			register unsigned long n = (size + CHIPGUARD) / 4;
 
 			while (n-- > 0)
 				*p++ = 0;
+			if ((size + CHIPGUARD) & 2)
+				*(unsigned short *)p = 0;
 		}
 		area = size;
 		return 0;
