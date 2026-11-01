@@ -158,16 +158,19 @@ One package per line, made by amix-packages (as monsw's):
 | catalog name | `paula-k30` | `paula-k46` |
 | pkginst | `paula30` | `paula46` |
 
-Each ships `/etc/conf/mod.d/paula`, an empty `/etc/conf/modreg.d/paula`
-(no parameters), `/dev/paula` as `c 54 0` mode 666, and `include/paula.h`
-for programs. It needs a kernel of kabi minor 3.
+Each ships `/etc/conf/mod.d/paula`, `/etc/conf/modreg.d/paula` (the
+package's parameter defaults), `/dev/paula` as `c 54 0` mode 0660 owner
+`root` group `audio`, and `include/paula.h` for programs. It needs a
+kernel of kabi minor 3, and the `audio` group on the box: its members may
+play. The holder of `/dev/paula` owns up to `maxarea` bytes of chip RAM
+and CIA-A timer B, so the node is not open to every user.
 
 ## Testing
 
 - **Host:** `make -C module` against the kits (above). The static path's own
   checks: `install.sh` into a port checkout, then the two relink steps.
 - **Bench (emulator first):** `port/test-tools/paulatest.c` on the module
-  kernel, with `/dev/paula` made as `c 54 0`. It shows `/dev/audio` refused
+  kernel, with `/dev/paula` made as `c 54 0`, mode 0660, group `audio`. It shows `/dev/audio` refused
   while `/dev/paula` is open, the tick rate (50.0 per second expected at
   125 BPM, less the one-shot slowdown) and idle 1 or 2: the open's
   self-test waits for a tick while the queue is empty (always 1), and the

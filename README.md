@@ -68,11 +68,15 @@ What the two steps do:
 
 Then finish the kernel as usual: root/swap stamp, CACR, install in `/stand`.
 
-On the machine, once, as root:
+On the machine, once, as root: an `audio` group in `/etc/group` with the
+users who may play (`audio::<gid>:<user>,<user>`), then
 
 ```sh
-mknod /dev/paula c 54 0 && chmod 666 /dev/paula
+mknod /dev/paula c 54 0 && chgrp audio /dev/paula && chmod 660 /dev/paula
 ```
+
+The node is mode 0660, group `audio`: whoever holds `/dev/paula` owns the
+chip-RAM sample area (up to 1.5 MB) and CIA-A timer B.
 
 ## Testing
 
