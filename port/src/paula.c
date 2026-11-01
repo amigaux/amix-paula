@@ -186,6 +186,8 @@ int c;
 	volatile struct amiga_audio *a = &AMIGA->audio[c];
 	unsigned long off = ch_off[c], words = ch_len[c], room;
 
+	if (!chip)		/* no area yet: no pointer, and DMA stays off */
+		return;
 	if (off == PAULA_NULLOFF || off >= area) {
 		a->buf = (__signed__ char *)chip;
 		a->size = 1;
@@ -301,7 +303,7 @@ paula_tick()
 			break;
 		}
 	}
-	if (on) {
+	if (on && chip) {	/* no area, nothing to play: Paula stays off */
 		if (off & on)		/* let Paula see the channel off */
 			wait_lines(SCANLINES);
 		AMIGA->dmacon = DMASET | on;
@@ -447,6 +449,88 @@ struct cred *crp;
 	return 0;
 }
 
+/*
+ * PAULA_SETUP, PAULA_LOAD and PAULA_PUSH run one at a time.  A process and
+ * its fork share the descriptor, and LOAD and PUSH can sleep in copyin:
+ * without this a second PUSH would fill the same ring slot, and a SETUP
+ * would free the area a LOAD is still copying into.  The one that finds
+ * another running gets EAGAIN, as a full queue gives, and tries again.
+ */
+static int inio;
+
+/* the area: SETUP's work (no sleep: AllocMem and FreeMem never do) */
+static int
+paula_setup(size)
+unsigned long size;
+{
+	int s;
+
+	if (size > PAULA_MAXAREA)
+		return EINVAL;
+	/* nothing may still play from the old area */
+	s = spl4();
+	channels_off();
+	tail = head;
+	fed = 0;
+	splx(s);
+	free_area();
+	if (size == 0)
+		return 0;
+	size = (size + 1) & ~1L;
+	/* MEMF_CHIP only: AllocMem leaves chip memory as it was, with
+	   MEMF_CLEAR or without (it clears only what it takes from kmem) */
+	chip = (char *)AllocMem(size + CHIPGUARD, MEMF_CHIP);
+	if (!chip)
+		return ENOMEM;
+	/* so clear it: the guard is the silent word, and a channel pointed
+	   at a part not yet loaded plays silence.  32-bit words, then the
+	   last 16 bits when the even size leaves them; nothing past the
+	   request */
+	{
+		register unsigned int *p = (unsigned int *)chip;
+		register unsigned long n = (size + CHIPGUARD) / 4;
+
+		while (n-- > 0)
+			*p++ = 0;
+		if ((size + CHIPGUARD) & 2)
+			*(unsigned short *)p = 0;
+	}
+	area = size;
+	return 0;
+}
+
+#define TICKHDR	((unsigned long)((struct paula_tick *)0)->op)	/* nops, pad */
+
+/*
+ * A tick from the user into ring slot t: its header, its ops, and then the
+ * check.  Every op is one of PO_LC..PO_TEMPO on a channel 0..3, and a
+ * PO_LC offset is even (Paula fetches words) or PAULA_NULLOFF.  The rest
+ * the tick itself bounds: lengths and offsets (put_sample), period,
+ * volume, tempo, DMACON bits.
+ */
+static int
+push_tick(t, u)
+struct paula_tick *t, *u;
+{
+	struct paula_op *o;
+	int i;
+
+	if (copyin((caddr_t)u, (caddr_t)t, TICKHDR))
+		return EFAULT;
+	if (t->nops > PAULA_MAXOPS)
+		return EINVAL;
+	if (t->nops && copyin((caddr_t)u->op, (caddr_t)t->op,
+	    t->nops * sizeof (struct paula_op)))
+		return EFAULT;
+	for (i = 0, o = t->op; i < t->nops; i++, o++) {
+		if (o->op < PO_LC || o->op > PO_TEMPO || o->ch > 3)
+			return EINVAL;
+		if (o->op == PO_LC && o->off != PAULA_NULLOFF && (o->off & 1))
+			return EINVAL;
+	}
+	return 0;
+}
+
 int
 paulaioctl(d, cmd, arg, oflag, crp, rvp)
 dev_t d;
@@ -457,68 +541,39 @@ int *rvp;
 	struct paula_load ld;
 	struct paula_status st;
 	struct paula_info in;
-	struct paula_tick *t;
-	unsigned long size;
-	int s, next;
+	int s, e, next;
 
 	switch (cmd) {
 	case PAULA_SETUP:
-		size = (unsigned long)arg;
-		if (size > PAULA_MAXAREA)
-			return EINVAL;
-		/* nothing may still play from the old area */
-		s = spl4();
-		channels_off();
-		tail = head;
-		fed = 0;
-		splx(s);
-		free_area();
-		if (size == 0)
-			return 0;
-		size = (size + 1) & ~1L;
-		/* MEMF_CHIP only: AllocMem leaves chip memory as it was, with
-		   MEMF_CLEAR or without (it clears only what it takes from
-		   kmem) */
-		chip = (char *)AllocMem(size + CHIPGUARD, MEMF_CHIP);
-		if (!chip)
-			return ENOMEM;
-		/* so clear it: the guard is the silent word, and a channel
-		   pointed at a part not yet loaded plays silence.  32-bit
-		   words, then the last 16 bits when the even size leaves them;
-		   nothing past the request */
-		{
-			register unsigned int *p = (unsigned int *)chip;
-			register unsigned long n = (size + CHIPGUARD) / 4;
-
-			while (n-- > 0)
-				*p++ = 0;
-			if ((size + CHIPGUARD) & 2)
-				*(unsigned short *)p = 0;
-		}
-		area = size;
-		return 0;
+		if (inio)
+			return EAGAIN;
+		inio = 1;
+		e = paula_setup((unsigned long)arg);
+		inio = 0;
+		return e;
 
 	case PAULA_LOAD:
 		if (copyin((caddr_t)arg, (caddr_t)&ld, sizeof ld))
 			return EFAULT;
+		if (inio)
+			return EAGAIN;
 		if (!chip || ld.off > area || ld.len > area - ld.off)
 			return EINVAL;
-		if (copyin((caddr_t)ld.data, (caddr_t)(chip + CHIPGUARD + ld.off), ld.len))
-			return EFAULT;
-		return 0;
+		inio = 1;
+		e = copyin((caddr_t)ld.data, (caddr_t)(chip + CHIPGUARD + ld.off), ld.len) ?
+		    EFAULT : 0;
+		inio = 0;
+		return e;
 
 	case PAULA_PUSH:
 		next = (head + 1) % PAULA_RING;
-		if (next == tail)
+		if (next == tail || inio)
 			return EAGAIN;
-		t = &ring[head];
-		if (copyin((caddr_t)arg, (caddr_t)t, 4))
-			return EFAULT;
-		if (t->nops > PAULA_MAXOPS)
-			return EINVAL;
-		if (t->nops && copyin((caddr_t)&((struct paula_tick *)arg)->op[0],
-		    (caddr_t)t->op, t->nops * sizeof (struct paula_op)))
-			return EFAULT;
+		inio = 1;
+		e = push_tick(&ring[head], (struct paula_tick *)arg);
+		inio = 0;
+		if (e)
+			return e;
 		head = next;		/* the tick may take it from here on */
 		fed = 1;
 		return 0;

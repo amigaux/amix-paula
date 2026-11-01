@@ -340,6 +340,131 @@ t_per_channel(void)
 	CHECK(drv_close() == 0);
 }
 
+/* a tick is checked before it is queued */
+static int
+queued(void)
+{
+	struct paula_status *st = (struct paula_status *)(user + 12288);
+
+	drv_ioctl(PAULA_STATUS, (long)st);
+	return (int)st->queued;
+}
+
+static void
+t_push_checks(void)
+{
+	struct paula_tick *t;
+
+	start("push_checks");
+	CHECK(drv_open() == 0);
+	t = utick();
+	op(t, 8, 0, 0, 0);				/* no such op */
+	CHECK(drv_ioctl(PAULA_PUSH, (long)t) == EINVAL);
+	t = utick();
+	op(t, PO_VOL, 4, 10, 0);			/* no channel 4 */
+	CHECK(drv_ioctl(PAULA_PUSH, (long)t) == EINVAL);
+	t = utick();
+	op(t, PO_LC, 0, 0, 33);				/* odd offset */
+	CHECK(drv_ioctl(PAULA_PUSH, (long)t) == EINVAL);
+	t = utick();
+	t->nops = PAULA_MAXOPS + 1;
+	CHECK(drv_ioctl(PAULA_PUSH, (long)t) == EINVAL);
+	CHECK(queued() == 0);
+	t = utick();
+	op(t, PO_LC, 0, 0, PAULA_NULLOFF);
+	op(t, PO_LC, 1, 0, 32);
+	op(t, PO_TEMPO, 0, 125, 0);
+	CHECK(drv_ioctl(PAULA_PUSH, (long)t) == 0);
+	CHECK(queued() == 1);
+	CHECK(drv_close() == 0);
+}
+
+/* a second PUSH, or a SETUP, while a call sleeps in copyin */
+static int nested_cmd, nested_rv;
+static long nested_arg;
+
+static void
+nested(void)
+{
+	nested_rv = drv_ioctl(nested_cmd, nested_arg);
+}
+
+static void
+arm_second(void)
+{
+	fake_on_copyin = nested;
+}
+
+static void
+t_one_at_a_time(void)
+{
+	struct paula_tick *t;
+	struct paula_load *ld = (struct paula_load *)(user + 4096);
+	int n;
+
+	start("one_at_a_time");
+	CHECK(drv_open() == 0);
+	t = utick();
+	op(t, PO_VOL, 0, 10, 0);
+	nested_cmd = PAULA_PUSH;
+	nested_arg = (long)t;
+	nested_rv = -1;
+	fake_on_copyin = nested;
+	CHECK(drv_ioctl(PAULA_PUSH, (long)t) == 0);
+	CHECK(nested_rv == EAGAIN);
+	CHECK(queued() == 1);
+	/* LOAD: the first copyin (of ld) runs before the lock, the second
+	   (the samples) inside it: a SETUP there gets EAGAIN */
+	CHECK(drv_ioctl(PAULA_SETUP, 1024L) == 0);
+	ld->off = 0;
+	ld->len = 64;
+	ld->data = user + 8192;
+	for (n = 0; n < 2; n++) {
+		nested_cmd = PAULA_SETUP;
+		nested_arg = 2048;
+		nested_rv = -1;
+		fake_on_copyin = 0;
+		if (n == 0)
+			fake_on_copyin = nested;	/* in the copyin of ld */
+		CHECK(drv_ioctl(PAULA_LOAD, (long)ld) == 0);
+		if (n == 0)
+			CHECK(nested_rv == 0);
+	}
+	nested_cmd = PAULA_SETUP;
+	nested_arg = 2048;
+	nested_rv = -1;
+	fake_on_copyin = arm_second;	/* in the samples' copyin */
+	CHECK(drv_ioctl(PAULA_LOAD, (long)ld) == 0);
+	CHECK(nested_rv == EAGAIN);
+	CHECK(drv_close() == 0);
+}
+
+/* a DMA on before PAULA_SETUP points Paula at nothing */
+static void
+t_no_area(void)
+{
+	struct paula_tick *t;
+	int i, set = 0;
+
+	start("no_area");
+	CHECK(drv_open() == 0);
+	t = utick();
+	op(t, PO_LC, 0, 0, 0);
+	op(t, PO_LEN, 0, 16, 0);
+	op(t, PO_DMA, 0, 0x8001, 0);
+	CHECK(drv_ioctl(PAULA_PUSH, (long)t) == 0);
+	fake_nev = 0;
+	drv_timer();
+	hw_step();
+	for (i = 0; i < fake_nev; i++)
+		if ((fake_ev[i].kind == EV_DMACON && (fake_ev[i].v & 0x8000)) ||
+		    fake_ev[i].kind == EV_LC)
+			set++;
+	CHECK(set == 0);
+	CHECK(fake_amiga.audio[0].buf == 0);
+	CHECK(drv_close() == 0);
+}
+
 /* idle counts underruns only: not the self-test's tick, not the ticks
    before the first push */
 static void
@@ -424,6 +549,9 @@ main(void)
 	t_tick_order();
 	t_dma_bound();
 	t_per_channel();
+	t_push_checks();
+	t_one_at_a_time();
+	t_no_area();
 	t_idle();
 	t_queue_full();
 	t_chip_clear();

@@ -35,6 +35,7 @@ int fake_race, fake_hung, fake_sleeps, fake_signal;
 int (*fake_int2)();
 void (*fake_on_tick)();
 void (*fake_on_attach)();
+void (*fake_on_copyin)();
 int fake_printfs;
 unsigned char *fake_chip_base;
 static unsigned long chip_size;
@@ -65,6 +66,7 @@ fake_reset(void)
 	fake_race = fake_hung = fake_sleeps = fake_signal = 0;
 	fake_on_tick = 0;
 	fake_on_attach = 0;
+	fake_on_copyin = 0;
 	fake_printfs = 0;
 	ncallouts = 0;
 	woken = 0;
@@ -172,6 +174,12 @@ fake_chip_overrun(void)
 int
 copyin(caddr_t from, caddr_t to, unsigned long n)
 {
+	if (fake_on_copyin) {
+		void (*f)() = fake_on_copyin;
+
+		fake_on_copyin = 0;
+		f();
+	}
 	memcpy(to, from, n);
 	return 0;
 }
