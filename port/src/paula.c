@@ -103,6 +103,7 @@ static int active;		/* timer B interrupts on */
 static unsigned short tb_latch;	/* the period the next one-shot restart loads */
 #endif
 static int clock_set;		/* 0 auto, 1 NTSC, 2 PAL (the module's parameter) */
+static unsigned char led_was;	/* PRA_LED at open, put back at close */
 static unsigned long clock_flags;	/* PI_* of the clock in use */
 
 /* per channel: where the sample pointer and length are, to keep the pair
@@ -359,6 +360,13 @@ free_area()
 	area = 0;
 }
 
+/* the power LED and audio filter as the open found them */
+static void
+restore_led()
+{
+	ACIAA->pra = (ACIAA->pra & ~PRA_LED) | led_was;
+}
+
 static void
 stop_all()
 {
@@ -368,6 +376,7 @@ stop_all()
 	ACIAA->crb = 0;
 	active = 0;
 	channels_off();
+	restore_led();
 	tail = head;
 	fed = 0;
 	splx(s);
@@ -415,6 +424,7 @@ paula_start()
 	pick_clock();
 
 	s = spl4();
+	led_was = ACIAA->pra & PRA_LED;
 	/* the channels are ours: no audio interrupts (Paula loops by itself) */
 	AMIGA->intena = AINTCLR | AIE_AUDIO;
 	AMIGA->intreq = AINTCLR | AIE_AUDIO;

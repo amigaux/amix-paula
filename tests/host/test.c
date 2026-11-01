@@ -465,6 +465,38 @@ t_no_area(void)
 	CHECK(drv_close() == 0);
 }
 
+/* the LED and filter bit goes back at close, and at halt */
+static void
+t_led(void)
+{
+	struct paula_tick *t;
+
+	start("led");
+	fake_acia.pra = 0x03;			/* LED dim, filter out; OVL */
+	CHECK(drv_open() == 0);
+	t = utick();
+	op(t, PO_LED, 0, 1, 0);
+	op(t, PO_VOL, 2, 40, 0);
+	CHECK(drv_ioctl(PAULA_PUSH, (long)t) == 0);
+	drv_timer();
+	CHECK(fake_acia.pra == 0x01);
+	CHECK(drv_close() == 0);
+	CHECK(fake_acia.pra == 0x03);
+	if (!drv_module())
+		return;
+	start("halt");
+	fake_acia.pra = 0x03;
+	CHECK(drv_open() == 0);
+	CHECK(drv_ioctl(PAULA_PUSH, (long)t) == 0);
+	drv_timer();
+	CHECK(fake_acia.pra == 0x01 && fake_amiga.audio[2].loud == 40);
+	drv_halt();
+	CHECK(fake_acia.pra == 0x03);
+	CHECK(fake_amiga.audio[2].loud == 0);
+	CHECK(!drv_active() && fake_acia.crb == 0);
+	CHECK(drv_close() == 0);	/* the test goes on; a box would not */
+}
+
 /* idle counts underruns only: not the self-test's tick, not the ticks
    before the first push */
 static void
@@ -552,6 +584,7 @@ main(void)
 	t_push_checks();
 	t_one_at_a_time();
 	t_no_area();
+	t_led();
 	t_idle();
 	t_queue_full();
 	t_chip_clear();

@@ -152,16 +152,22 @@ paula_unload()
 	return 0;
 }
 
-/* the halt pass: no sleep, interrupts perhaps off */
+/* the halt pass: no sleep, interrupts perhaps off; timer B off, the
+   channels silent, the LED and filter as the open found them */
 static void
 paula_halt()
 {
+	int c;
+
 	if (!busy)		/* timer B and the channels are not ours */
 		return;
 	ACIAA->icr = ICR_CLR | ICR_TB;
 	ACIAA->crb = 0;
 	active = 0;
 	AMIGA->dmacon = DMACLR | DMA_AUDIO;
+	for (c = 0; c < 4; c++)
+		AMIGA->audio[c].loud = 0;
+	restore_led();
 }
 
 struct mod_drv_data paula_drvdata[] = {
