@@ -24,7 +24,7 @@ done
 echo "[*] base: $(basename "$IN")"
 sh "$HERE/src/mk_modelb_sysroot.sh" | sed 's/^/      /'
 AMIX_SYSROOT="$HERE/build/sysroot-modelb"; export AMIX_SYSROOT
-P="$HERE/build/paulasrc"; rm -rf "$P"; mkdir -p "$P"
+P="$HERE/build/paulasrc"; rm -rf "${P:?}"; mkdir -p "$P"
 cp "$HERE/src/paula.c" "$HERE/src/paula.h" "$P/"
 # the Amiga memory.h (AllocMem), not libc's <memory.h> that the -I order would find first
 cp "$AMIX_ROOT/usr/sys/amiga/inc/memory.h" "$P/"

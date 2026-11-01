@@ -33,6 +33,6 @@ test: $(OUT)/t-static $(OUT)/t-module
 	$(OUT)/t-module
 
 clean:
-	rm -rf "$(OUT)"
+	out="$(OUT)"; rm -rf "$${out:?}"
 
 .PHONY: all test clean

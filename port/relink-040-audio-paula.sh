@@ -26,7 +26,7 @@ $NM "$IN" | grep -qE " [Ww] audioinfo$" && { echo "[FAIL] base already has a rel
 echo "[*] base: $(basename "$IN")"
 sh "$HERE/src/mk_modelb_sysroot.sh" | sed 's/^/      /'
 AMIX_SYSROOT="$HERE/build/sysroot-modelb"; export AMIX_SYSROOT
-B="$HERE/build/audiosrc"; rm -rf "$B"; mkdir -p "$B"
+B="$HERE/build/audiosrc"; rm -rf "${B:?}"; mkdir -p "$B"
 cp "$SRC/audio.c" "$SRC/audio.h" "$B/"
 # the Amiga memory.h, not libc's <memory.h> that the -I order would find first
 cp "$AMIX_ROOT/usr/sys/amiga/inc/memory.h" "$B/"
