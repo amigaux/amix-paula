@@ -4,6 +4,8 @@
 # module/Makefile turns this file into the kit's Master.  The major, 54, is
 # paula's in the registry (amix kernel/dlm abi/registry/majors), as in the
 # static form; 53 there is kinfo's.
+#
+# Copyright (c) 2026 Jussi Alanärä.  MIT licence, see LICENSE.
 name=paula
 class=demand
 majors=c:54

@@ -27,7 +27,9 @@
  * FreeMem, displaytype, and the /dev/audio exclusion's paula_busy and
  * audio_nopen.
  *
- * Copyright (c) 2026 Jussi Alanärä.  MIT licence, see LICENSE.
+ * Copyright (c) 2026 Jussi Alanärä.  MIT licence, see LICENSE.  The driver
+ * it includes, port/src/paula.c, is isoriano1968's with our changes (see
+ * there).
  */
 #define PAULA_MODULE
 #include "paula.c"

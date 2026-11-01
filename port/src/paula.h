@@ -9,6 +9,9 @@
  * (PAULA_PUSH); CIA-A timer B, running at the song's tempo, applies one
  * queued tick per interrupt.  Sample data lives in a chip-RAM area of the
  * driver's (PAULA_SETUP, PAULA_LOAD); pointers are offsets into it.
+ *
+ * Copyright (c) 2026 isoriano1968; PAULA_INFO, PAULA_WAIT and PO_DMAON
+ * (c) 2026 Jussi Alanärä.  MIT licence, see LICENSE.
  */
 #ifndef _PAULA_H
 #define _PAULA_H

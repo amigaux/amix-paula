@@ -7,6 +7,9 @@
 #   sh relink-040-paula.sh IN OUT
 # aciaaintr (the level-2 CIA-A handler) is weakened: paula.o's version does
 # the stock keyboard / parallel / clock work and then timer B.
+#
+# Copyright (c) 2026 isoriano1968; changes (c) 2026 Jussi Alanärä.
+# MIT licence, see LICENSE.
 set -e
 HERE=$(cd "$(dirname "$0")" && pwd)
 . "$HERE/tools/config-load.sh"

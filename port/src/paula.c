@@ -45,6 +45,11 @@
  * restarted by the module's level-2 handler (module/README.md says why).
  *
  * Original code for this port; no Commodore source.
+ *
+ * Copyright (c) 2026 isoriano1968; changes (c) 2026 Jussi Alanärä (the
+ * module form, the chip clear, the claim, the DMA waits, the clocks,
+ * PAULA_INFO and PAULA_WAIT, the PUSH checks, the LED restore).
+ * MIT licence, see LICENSE.
  */
 #include "sys/types.h"
 #include "sys/param.h"

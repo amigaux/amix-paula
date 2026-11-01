@@ -43,6 +43,9 @@ which must match exactly once; our lines go in after it:
   3. audioopen(): the allocation, then splaudio   -> paula_busy tested again
   4. audioopen(): the client joins the list       -> audio_nopen++
   5. audioclose(): the client leaves the list     -> audio_nopen--
+
+Copyright (c) 2026 isoriano1968; the third place, the re-test after the
+allocation, (c) 2026 Jussi Alanärä.  MIT licence, see LICENSE.
 """
 import hashlib
 import sys

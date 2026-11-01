@@ -9,6 +9,9 @@
 # the image as dead code: its global entry points are weakened, so every
 # reference from outside it -- cdevsw (audioinfo), the level-4 interrupt
 # (audiointr) -- binds to the rebuilt object.
+#
+# Copyright (c) 2026 isoriano1968; changes (c) 2026 Jussi Alanärä.
+# MIT licence, see LICENSE.
 set -e
 HERE=$(cd "$(dirname "$0")" && pwd)
 . "$HERE/tools/config-load.sh"

@@ -34,6 +34,8 @@ the order.
   1. the declaration of the silent buffer      -> the bounded wait, the flag
   2. audioinit(): before the busy-wait          -> the wait, and the way out
   3. audioopen(): the call of audioinit()       -> EIO when it timed out
+
+Copyright (c) 2026 Jussi Alanärä.  MIT licence, see LICENSE.
 """
 import hashlib
 import sys

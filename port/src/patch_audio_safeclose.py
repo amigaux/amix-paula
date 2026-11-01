@@ -22,6 +22,8 @@ SHA-256 of the line exactly as the stock file has it, which must match
 exactly once; our lines go in after it.
 
   audioclose(): the client leaves the list  -> the channels it holds stop
+
+Copyright (c) 2026 Jussi Alanärä.  MIT licence, see LICENSE.
 """
 import hashlib
 import sys
