@@ -62,6 +62,8 @@
 extern int paula_busy;		/* patched audio.c */
 extern int audio_nopen;		/* patched audio.c */
 extern unsigned int displaytype;	/* the PAL macro, sys/param.h */
+extern int sleep();
+extern void wakeup();
 #ifndef PAULA_MODULE
 extern void kbintr();
 extern void parintr();
@@ -104,7 +106,20 @@ static unsigned short tb_latch;	/* the period the next one-shot restart loads */
 #endif
 static int clock_set;		/* 0 auto, 1 NTSC, 2 PAL (the module's parameter) */
 static unsigned char led_was;	/* PRA_LED at open, put back at close */
+static int waiting;		/* a PAULA_WAIT sleeps on &waiting */
 static unsigned long clock_flags;	/* PI_* of the clock in use */
+
+#define QUEUED()	((head - tail + PAULA_RING) % PAULA_RING)
+
+/* the queue moved or was dropped: a PAULA_WAIT looks again */
+static void
+wake_waiters()
+{
+	if (waiting) {
+		waiting = 0;
+		wakeup((caddr_t)&waiting);
+	}
+}
 
 /* per channel: where the sample pointer and length are, to keep the pair
    inside the area whichever is written first */
@@ -325,6 +340,7 @@ paula_tick()
 		put_op(&t->op[held[i]]);
 	tail = (tail + 1) % PAULA_RING;
 	played++;
+	wake_waiters();
 }
 
 /*
@@ -379,6 +395,7 @@ stop_all()
 	restore_led();
 	tail = head;
 	fed = 0;
+	wake_waiters();
 	splx(s);
 }
 
@@ -491,6 +508,7 @@ unsigned long size;
 	channels_off();
 	tail = head;
 	fed = 0;
+	wake_waiters();
 	splx(s);
 	free_area();
 	if (size == 0)
@@ -601,7 +619,7 @@ int *rvp;
 		s = spl4();
 		st.played = played;
 		st.idle = idle;
-		st.queued = (head - tail + PAULA_RING) % PAULA_RING;
+		st.queued = QUEUED();
 		st.area = area;
 		splx(s);
 		if (copyout((caddr_t)&st, (caddr_t)arg, sizeof st))
@@ -625,6 +643,22 @@ int *rvp;
 		tail = head;
 		fed = 0;
 		channels_off();
+		wake_waiters();
+		splx(s);
+		return 0;
+
+	case PAULA_WAIT:
+		/* until no more than arg ticks are queued; at spl4, so the tick
+		   cannot wake us between the test and the sleep.  A signal ends
+		   the wait (EINTR) */
+		s = spl4();
+		while (QUEUED() > (arg < 0 ? 0 : arg)) {
+			waiting = 1;
+			if (sleep((caddr_t)&waiting, (PZERO + 1) | PCATCH)) {
+				splx(s);
+				return EINTR;
+			}
+		}
 		splx(s);
 		return 0;
 	}

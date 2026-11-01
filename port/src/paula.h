@@ -20,6 +20,9 @@
 #define PAULA_STATUS	(PAULAIOC | 4)	/* struct paula_status */
 #define PAULA_RESET	(PAULAIOC | 5)	/* drop the queue, stop the channels */
 #define PAULA_INFO	(PAULAIOC | 6)	/* struct paula_info (version 2 on) */
+#define PAULA_WAIT	(PAULAIOC | 7)	/* int n, as the value: sleep until no more
+					   than n ticks are queued (version 2 on;
+					   EINTR on a signal) */
 
 #define PAULA_VERSION	2		/* paula_info.version; a version 1
 					   driver answers PAULA_INFO with EINVAL */

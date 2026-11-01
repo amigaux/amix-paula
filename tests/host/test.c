@@ -497,6 +497,30 @@ t_led(void)
 	CHECK(drv_close() == 0);	/* the test goes on; a box would not */
 }
 
+/* PAULA_WAIT sleeps until the queue is down to n; a signal ends it */
+static void
+t_wait(void)
+{
+	struct paula_tick *t;
+	int i;
+
+	start("wait");
+	CHECK(drv_open() == 0);
+	t = utick();
+	for (i = 0; i < 3; i++)
+		CHECK(drv_ioctl(PAULA_PUSH, (long)t) == 0);
+	fake_sleeps = 0;
+	CHECK(drv_ioctl(PAULA_WAIT, 1L) == 0);
+	CHECK(queued() == 1 && fake_sleeps == 2 && fake_hung == 0);
+	CHECK(drv_ioctl(PAULA_WAIT, 5L) == 0);	/* already there */
+	CHECK(fake_sleeps == 2);
+	fake_on_tick = 0;			/* the queue does not move */
+	fake_signal = 1;
+	CHECK(drv_ioctl(PAULA_WAIT, 0L) == EINTR);
+	CHECK(fake_ipl == 0);
+	CHECK(drv_close() == 0);
+}
+
 /* idle counts underruns only: not the self-test's tick, not the ticks
    before the first push */
 static void
@@ -585,6 +609,7 @@ main(void)
 	t_one_at_a_time();
 	t_no_area();
 	t_led();
+	t_wait();
 	t_idle();
 	t_queue_full();
 	t_chip_clear();
