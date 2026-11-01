@@ -3,6 +3,7 @@
 #   make -C tests            all of them
 #   make -C tests host       the driver on a fake of the hardware (host cc)
 #   make -C tests cdevsw     the static form's cdevsw patcher (cross as/ld)
+#   make -C tests install    install.sh
 #
 # KERNEL=<a relocatable static k46 kernel> runs the cdevsw test on it too.
 #
@@ -10,7 +11,7 @@
 
 HERE := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
 
-all: host cdevsw
+all: host cdevsw install
 
 host:
 	$(MAKE) -C $(HERE)/host
@@ -18,4 +19,7 @@ host:
 cdevsw:
 	sh $(HERE)/cdevsw/test.sh
 
-.PHONY: all host cdevsw
+install:
+	sh $(HERE)/install/test.sh
+
+.PHONY: all host cdevsw install
