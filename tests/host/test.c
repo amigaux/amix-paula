@@ -107,6 +107,46 @@ t_exclusion(void)
 	CHECK(drv_close() == 0);
 }
 
+/* PAL or NTSC from the Agnus/Alice id; displaytype reported */
+static unsigned
+latch(void)
+{
+	return fake_acia.tbhi << 8 | fake_acia.tblo;
+}
+
+static void
+clock_case(const char *name, unsigned vposr, unsigned dt, unsigned lt,
+    unsigned long flags, unsigned long clock)
+{
+	struct paula_info *in = (struct paula_info *)(user + 12288);
+
+	start(name);
+	fake_amiga.vposr = vposr;
+	displaytype = dt;
+	CHECK(drv_open() == 0);
+	CHECK(latch() == lt);			/* 125 BPM */
+	memset(in, 0xff, sizeof *in);
+	CHECK(drv_ioctl(PAULA_INFO, (long)in) == 0);
+	CHECK(in->version == PAULA_VERSION);
+	CHECK(in->flags == flags);
+	CHECK(in->clock == clock && in->eclock == clock / 5);
+	CHECK(in->queue == PAULA_RING - 1 && in->maxops == PAULA_MAXOPS);
+	CHECK(in->maxarea == PAULA_MAXAREA);
+	CHECK(drv_close() == 0);
+}
+
+static void
+t_clock(void)
+{
+	clock_case("clock_pal", 0x2000, 2, 14187, 0, 3546895);		/* ECS PAL */
+	clock_case("clock_ntsc", 0x3000, 1, 14318,
+	    PI_NTSC | PI_IDNTSC | PI_FIELD60, 3579545);			/* ECS NTSC */
+	clock_case("clock_aga_ntsc", 0x3200, 1, 14318,
+	    PI_NTSC | PI_IDNTSC | PI_FIELD60, 3579545);			/* Alice NTSC */
+	/* a PAL machine whose beam was set to 60 Hz fields: still PAL */
+	clock_case("clock_pal_60hz", 0x2200, 1, 14187, PI_FIELD60, 3546895);
+}
+
 /* the ring: KM_NOSLEEP, and a clean ENOMEM */
 static void
 t_nosleep(void)
@@ -376,6 +416,7 @@ main(void)
 	}
 	t_open_close();
 	t_exclusion();
+	t_clock();
 	t_nosleep();
 	t_open_race();
 	t_selftest_race();

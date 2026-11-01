@@ -19,6 +19,10 @@
 #define PAULA_PUSH	(PAULAIOC | 3)	/* struct paula_tick; EAGAIN when the queue is full */
 #define PAULA_STATUS	(PAULAIOC | 4)	/* struct paula_status */
 #define PAULA_RESET	(PAULAIOC | 5)	/* drop the queue, stop the channels */
+#define PAULA_INFO	(PAULAIOC | 6)	/* struct paula_info (version 2 on) */
+
+#define PAULA_VERSION	2		/* paula_info.version; a version 1
+					   driver answers PAULA_INFO with EINVAL */
 
 #define PAULA_MAXAREA	(1536L * 1024)	/* sample area limit */
 #define PAULA_MAXOPS	48		/* operations per tick */
@@ -60,5 +64,24 @@ struct paula_status {
 	unsigned long	queued;		/* ticks waiting */
 	unsigned long	area;		/* sample area bytes */
 };
+
+/* what the driver is and runs at; added in version 2 (a new ioctl, as
+   PAULA_STATUS's struct cannot grow under old programs) */
+struct paula_info {
+	unsigned long	version;	/* PAULA_VERSION */
+	unsigned long	flags;		/* PI_* */
+	unsigned long	clock;		/* Paula's clock, Hz: period p plays
+					   clock / p samples a second */
+	unsigned long	eclock;		/* the CIA E clock timer B counts, Hz:
+					   a tick is eclock * 2.5 / BPM counts */
+	unsigned long	queue;		/* ticks PAULA_PUSH can queue */
+	unsigned long	maxops;		/* operations per tick */
+	unsigned long	maxarea;	/* sample area bytes PAULA_SETUP takes */
+};
+
+#define PI_NTSC		0x01	/* the clocks are NTSC's (else PAL's) */
+#define PI_IDNTSC	0x02	/* the Agnus/Alice id says an NTSC part */
+#define PI_FIELD60	0x04	/* the kernel counted 60 Hz video fields */
+#define PI_SET		0x08	/* PI_NTSC set by the module's clock parameter */
 
 #endif /* _PAULA_H */

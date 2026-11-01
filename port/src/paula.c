@@ -13,6 +13,7 @@
  * CIA-B is not used and its level-6 input EXTER stays disabled -- an
  * unacknowledged Zorro /INT6 there storms, see amix-z3660net), runs at
  * 709379 (PAL) or 715909 (NTSC) * 2.5 / BPM, as ProTracker's CIA timing.
+ * Which of the two: pick_clock() says how it is chosen.
  * Each underflow applies one queued tick from the level-2 interrupt
  * (aciaaintr, replaced here: keyboard, parallel and clock exactly as stock,
  * then timer B).  Within a tick the ProTracker order is kept: channels
@@ -60,7 +61,7 @@
 
 extern int paula_busy;		/* patched audio.c */
 extern int audio_nopen;		/* patched audio.c */
-extern unsigned int displaytype;
+extern unsigned int displaytype;	/* the PAL macro, sys/param.h */
 #ifndef PAULA_MODULE
 extern void kbintr();
 extern void parintr();
@@ -69,6 +70,9 @@ extern void addupc_clk();
 #endif
 
 #define CHIPGUARD	16	/* zero bytes before the sample area: PAULA_NULLOFF */
+#define CLOCK_PAL	3546895L	/* Paula's clock, Hz; the E clock is a fifth */
+#define CLOCK_NTSC	3579545L
+#define VPOSR_NTSC	0x1000	/* Agnus/Alice id bit 4: an NTSC part */
 #define SCANLINES	5	/* ProTracker's DMA wait, ~320 us */
 #define CRB_START	0x01
 #ifndef PAULA_MODULE
@@ -89,17 +93,47 @@ static int active;		/* timer B interrupts on */
 #ifdef PAULA_MODULE
 static unsigned short tb_latch;	/* the period the next one-shot restart loads */
 #endif
+static int clock_set;		/* 0 auto, 1 NTSC, 2 PAL (the module's parameter) */
+static unsigned long clock_flags;	/* PI_* of the clock in use */
 
 /* per channel: where the sample pointer and length are, to keep the pair
    inside the area whichever is written first */
 static unsigned long ch_off[4];
 static unsigned long ch_len[4];
 
+/*
+ * PAL or NTSC: the crystal behind Paula's clock and the CIA E clock, which
+ * no register reports.  Two hints:
+ *  - the Agnus/Alice id in VPOSR (bits 8-14), whose bit 4 is set on an
+ *    NTSC part: the chip and its strapping, not a mode software sets;
+ *  - displaytype, which the kernel sets at boot by counting E-clock ticks
+ *    over one video field: 50 or 60 Hz fields, the beam's mode, which an
+ *    ECS or AGA chip can be switched to whatever the crystal (the boot
+ *    menu's PAL/NTSC choice).  The PAL macro reads it.
+ * The id is taken; both are reported (PAULA_INFO), and the module's clock
+ * parameter overrides them for a machine whose crystal is not the chip's.
+ */
+static void
+pick_clock()
+{
+	unsigned long f = 0;
+
+	if (AMIGA->vposr & VPOSR_NTSC)
+		f |= PI_IDNTSC;
+	if (!PAL)
+		f |= PI_FIELD60;
+	if (clock_set)
+		f |= PI_SET | (clock_set == 1 ? PI_NTSC : 0);
+	else if (f & PI_IDNTSC)
+		f |= PI_NTSC;
+	clock_flags = f;
+}
+
 static unsigned short
 tempo_latch(bpm)
 int bpm;
 {
-	unsigned long e = PAL ? 709379L : 715909L;
+	unsigned long e = (clock_flags & PI_NTSC ? CLOCK_NTSC : CLOCK_PAL) / 5;
 
 	if (bpm < 32)
 		bpm = 32;
@@ -367,6 +401,7 @@ paula_start()
 	fed = 0;
 	chip = 0;
 	area = 0;
+	pick_clock();
 
 	s = spl4();
 	/* the channels are ours: no audio interrupts (Paula loops by itself) */
@@ -421,6 +456,7 @@ int *rvp;
 {
 	struct paula_load ld;
 	struct paula_status st;
+	struct paula_info in;
 	struct paula_tick *t;
 	unsigned long size;
 	int s, next;
@@ -495,6 +531,18 @@ int *rvp;
 		st.area = area;
 		splx(s);
 		if (copyout((caddr_t)&st, (caddr_t)arg, sizeof st))
+			return EFAULT;
+		return 0;
+
+	case PAULA_INFO:
+		in.version = PAULA_VERSION;
+		in.flags = clock_flags;
+		in.clock = clock_flags & PI_NTSC ? CLOCK_NTSC : CLOCK_PAL;
+		in.eclock = in.clock / 5;
+		in.queue = PAULA_RING - 1;
+		in.maxops = PAULA_MAXOPS;
+		in.maxarea = PAULA_MAXAREA;
+		if (copyout((caddr_t)&in, (caddr_t)arg, sizeof in))
 			return EFAULT;
 		return 0;
 
